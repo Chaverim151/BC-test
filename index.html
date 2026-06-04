@@ -7,7 +7,29 @@
 <link rel="icon" type="image/png" href="https://i.ibb.co/Kc2B52nS/download-1.png" />
 <link rel="apple-touch-icon" href="https://i.ibb.co/Kc2B52nS/download-1.png" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css" />
-<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAFAsM0xqmKrnirTKIH9If2s4GuDpmO6BQ&libraries=places&callback=initAutocomplete" async defer></script>
+<script>
+// Must be global for Google Maps callback — defined before the API script loads
+window.initAutocomplete = function() {
+  var input = document.getElementById('location');
+  if (!input || !window.google) return;
+
+  var autocomplete = new google.maps.places.Autocomplete(input, {
+    types: ['geocode', 'establishment'],
+    componentRestrictions: { country: 'us' },
+    fields: ['formatted_address', 'geometry', 'name']
+  });
+
+  autocomplete.addListener('place_changed', function() {
+    var place = autocomplete.getPlace();
+    if (!place.geometry) return;
+    var address = place.formatted_address || place.name || input.value;
+    input.value = address;
+    input.dataset.lat = place.geometry.location.lat();
+    input.dataset.lng = place.geometry.location.lng();
+  });
+};
+</script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAFAsM0xqmKrnirTKIH9If2s4GuDpmO6BQ&libraries=places&loading=async&callback=initAutocomplete" async defer></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F2ECD8; min-height: 100vh; -webkit-text-size-adjust: 100%; }
@@ -21,6 +43,18 @@
   .brand-name { font-size: 22px; font-weight: 600; color: #C8A532; line-height: 1.1; }
   .brand-sub { font-size: 10px; color: #C8A532; letter-spacing: 2.5px; text-transform: uppercase; opacity: 0.6; margin-top: 2px; }
   .brand-tag { font-size: 11px; color: #7A6830; margin-top: 3px; }
+
+  /* ── Telzio live call ── */
+  .telzio-status { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; margin-left: 6px; }
+  .telzio-status.live { color: #2E7D32; }
+  .telzio-status.live::before { content: ''; width: 7px; height: 7px; background: #4CAF50; border-radius: 50%; animation: pulse-green 1.5s infinite; display: inline-block; }
+  .telzio-status.offline { color: #9A8030; }
+  @keyframes pulse-green { 0%,100%{opacity:1;transform:scale(1);} 50%{opacity:0.5;transform:scale(1.3);} }
+  .live-call-banner { display: flex; align-items: center; gap: 8px; background: #0A1F0A; border: 1px solid #2E7D32; border-radius: 8px; padding: 7px 10px; margin-top: 6px; font-size: 13px; color: #81C784; }
+  .live-call-banner i { font-size: 15px; color: #4CAF50; }
+  .live-call-banner span { flex: 1; font-weight: 500; letter-spacing: 0.3px; }
+  .use-call-btn { background: #2E7D32; border: none; border-radius: 6px; padding: 4px 10px; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; white-space: nowrap; }
+  .use-call-btn:hover { background: #388E3C; }
 
   /* ── Google Places Autocomplete overrides ── */
   .pac-container { border-radius: 10px; border: 1.5px solid #E0CC80; box-shadow: 0 4px 20px rgba(0,0,0,0.12); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin-top: 4px; background: #FFFEF5; z-index: 9999; }
@@ -326,10 +360,21 @@
           </div>
         </div>
         <div>
-          <div class="lbl"><i class="ti ti-phone"></i> Phone</div>
+          <div class="lbl">
+            <i class="ti ti-phone"></i> Phone
+            <span id="telzioStatus" class="telzio-status"></span>
+          </div>
           <div class="inp-wrap">
             <input type="tel" id="phone" placeholder="(555) 123-4567" />
             <button class="field-clear" onclick="window.clearField('phone')" tabindex="-1">&times;</button>
+          </div>
+          <button class="paste-maps-btn" onclick="window.pullLastCall()" style="margin-top:6px;border-color:#4a7fa5;color:#4a7fa5;">
+            <i class="ti ti-phone-incoming"></i> Pull last call
+          </button>
+          <div id="liveCallBanner" class="live-call-banner" style="display:none;">
+            <i class="ti ti-phone-incoming"></i>
+            <span id="liveCallNum"></span>
+            <button onclick="window.fillFromLiveCall()" class="use-call-btn">Use this number</button>
           </div>
         </div>
       </div>
@@ -339,7 +384,7 @@
       <div class="field">
         <div class="lbl"><i class="ti ti-map-pin"></i> Location <span class="req">*</span></div>
         <div class="inp-wrap loc-wrap">
-          <input type="text" id="location" placeholder="123 Main St, Edison, NJ" style="padding-right:90px;" oninput="window.updateMapsLink(); document.getElementById('location').dataset.lat=''; document.getElementById('location').dataset.lng='';" />
+          <input type="text" id="location" placeholder="123 Main St, Edison, NJ" style="padding-right:90px;" oninput="document.getElementById('location').dataset.lat=''; document.getElementById('location').dataset.lng='';" />
           <button class="field-clear" onclick="window.clearField('location')" tabindex="-1" style="right:56px;">&times;</button>
           <button class="map-btn" onclick="window.verifyLocation()"><i class="ti ti-map-pin" style="font-size:12px;"></i> Map</button>
         </div>
@@ -630,6 +675,106 @@ window.makesData = {
   "Other":["Other"]
 };
 
+// ── Telzio live call polling ──
+// Replace with your Cloudflare Worker URL after deploying telzio-proxy.js
+const TELZIO_PROXY_URL = 'https://cobc.shmueleidelman-work.workers.dev/proxy';
+var telzioInterval = null;
+var lastLiveCallFrom = null;
+
+async function pollTelzioLiveCalls() {
+  try {
+    var resp = await fetch(TELZIO_PROXY_URL + '/calls/live');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    var data = await resp.json();
+    var calls = data.LiveCalls || [];
+
+    // Find first inbound call
+    var inbound = calls.filter(function(c) { return c.Direction === 'inbound'; });
+
+    var statusEl = document.getElementById('telzioStatus');
+    var banner = document.getElementById('liveCallBanner');
+    var numEl = document.getElementById('liveCallNum');
+
+    if (inbound.length > 0) {
+      var call = inbound[0];
+      var from = call.From || '';
+      // Format: +12015551234 → (201) 555-1234
+      var formatted = formatPhone(from);
+      lastLiveCallFrom = formatted;
+
+      statusEl.textContent = 'Live call';
+      statusEl.className = 'telzio-status live';
+
+      // Only show banner if phone field is empty or different
+      var currentPhone = document.getElementById('phone').value.trim();
+      if (currentPhone !== formatted) {
+        numEl.textContent = formatted;
+        banner.style.display = 'flex';
+      }
+    } else {
+      lastLiveCallFrom = null;
+      statusEl.textContent = '';
+      statusEl.className = 'telzio-status';
+      banner.style.display = 'none';
+    }
+  } catch(e) {
+    // Silently fail — don't disrupt dispatch
+    console.warn('Telzio poll error:', e.message);
+    var statusEl = document.getElementById('telzioStatus');
+    statusEl.textContent = '';
+    statusEl.className = 'telzio-status offline';
+  }
+}
+
+function formatPhone(e164) {
+  var digits = e164.replace(/\D/g, '');
+  if (digits.length === 11 && digits[0] === '1') digits = digits.slice(1);
+  if (digits.length === 10) {
+    return '(' + digits.slice(0,3) + ') ' + digits.slice(3,6) + '-' + digits.slice(6);
+  }
+  return e164;
+}
+
+window.pullLastCall = async function() {
+  showToast('Fetching last call...');
+  try {
+    var resp = await fetch(TELZIO_PROXY_URL + '/calls/log?MaxResults=1&Direction=inbound');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    var data = await resp.json();
+    var calls = data.Calls || data.calls || data || [];
+    if (!Array.isArray(calls) || calls.length === 0) {
+      showToast('No recent calls found');
+      return;
+    }
+    var last = calls[0];
+    var from = last.From || last.from || '';
+    var formatted = formatPhone(from);
+    if (formatted) {
+      document.getElementById('phone').value = formatted;
+      showToast('\u2713 Last call: ' + formatted);
+    } else {
+      showToast('Could not read caller number');
+    }
+  } catch(e) {
+    showToast('Could not fetch call log');
+    console.warn('pullLastCall error:', e);
+  }
+};
+
+window.fillFromLiveCall = function() {
+  if (lastLiveCallFrom) {
+    document.getElementById('phone').value = lastLiveCallFrom;
+    document.getElementById('liveCallBanner').style.display = 'none';
+    showToast('\u2713 Phone filled from live call');
+  }
+};
+
+// Start polling every 5 seconds once page loads
+if (TELZIO_PROXY_URL.indexOf('YOUR-WORKER') === -1) {
+  pollTelzioLiveCalls();
+  telzioInterval = setInterval(pollTelzioLiveCalls, 1000);
+}
+
 // ── Load all data on startup ──
 async function loadAll() {
   try {
@@ -705,18 +850,7 @@ async function loadAll() {
 
 // ── Generate Google Maps link from location field ──
 function updateMapsLink() {
-  var loc = document.getElementById('location').value.trim();
-  var wrap = document.getElementById('mapsLinkWrap');
-  var anchor = document.getElementById('mapsLinkAnchor');
-  var text = document.getElementById('mapsLinkText');
-  if (loc) {
-    var url = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(loc);
-    anchor.href = url;
-    text.textContent = 'Open "' + loc + '" in Google Maps';
-    wrap.style.display = 'block';
-  } else {
-    wrap.style.display = 'none';
-  }
+  // Element was removed — function kept as no-op for compatibility
 }
 
 window.updateMapsLink = updateMapsLink;
@@ -1260,37 +1394,6 @@ window.clearForm = async function() {
 
 // ── Init ──
 loadAll();
-</script>
-<script>
-// Google Maps Places Autocomplete — called by the Maps API once loaded
-function initAutocomplete() {
-  var input = document.getElementById('location');
-  if (!input) return;
-
-  var autocomplete = new google.maps.places.Autocomplete(input, {
-    types: ['geocode', 'establishment'],
-    componentRestrictions: { country: 'us' },
-    fields: ['formatted_address', 'geometry', 'name']
-  });
-
-  autocomplete.addListener('place_changed', function() {
-    var place = autocomplete.getPlace();
-    if (!place.geometry) return;
-
-    // Use formatted address, or name if address unavailable
-    var address = place.formatted_address || place.name || input.value;
-    input.value = address;
-
-    // Store coords for use in message if needed
-    var lat = place.geometry.location.lat();
-    var lng = place.geometry.location.lng();
-    input.dataset.lat = lat;
-    input.dataset.lng = lng;
-
-    // Trigger maps link update if present
-    if (window.updateMapsLink) window.updateMapsLink();
-  });
-}
 </script>
 </body>
 </html>
