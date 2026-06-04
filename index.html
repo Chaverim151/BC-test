@@ -369,7 +369,7 @@ window.initAutocomplete = function() {
             <button class="field-clear" onclick="window.clearField('phone')" tabindex="-1">&times;</button>
           </div>
           <button class="paste-maps-btn" onclick="window.pullLastCall()" style="margin-top:6px;border-color:#4a7fa5;color:#4a7fa5;">
-            <i class="ti ti-phone-incoming"></i> Pull last call
+            <i class="ti ti-phone-incoming"></i> Last call <span style="font-size:9px;font-weight:700;background:#4a7fa5;color:#fff;padding:1px 5px;border-radius:3px;letter-spacing:0.5px;text-transform:uppercase;vertical-align:middle;">Beta</span>
           </button>
           <div id="liveCallBanner" class="live-call-banner" style="display:none;">
             <i class="ti ti-phone-incoming"></i>
@@ -738,25 +738,32 @@ function formatPhone(e164) {
 window.pullLastCall = async function() {
   showToast('Fetching last call...');
   try {
-    var resp = await fetch(TELZIO_PROXY_URL + '/calls/log?MaxResults=1&Direction=inbound');
+    var resp = await fetch(TELZIO_PROXY_URL + '/calls/log?MaxResults=3&Direction=inbound');
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     var data = await resp.json();
-    var calls = data.Calls || data.calls || data || [];
-    if (!Array.isArray(calls) || calls.length === 0) {
+
+    // Telzio returns array directly or wrapped — handle both
+    var calls = Array.isArray(data) ? data : (data.Calls || data.calls || []);
+
+    if (calls.length === 0) {
       showToast('No recent calls found');
       return;
     }
-    var last = calls[0];
-    var from = last.From || last.from || '';
-    var formatted = formatPhone(from);
-    if (formatted) {
-      document.getElementById('phone').value = formatted;
-      showToast('\u2713 Last call: ' + formatted);
-    } else {
-      showToast('Could not read caller number');
+
+    // Find first inbound with a From number
+    var call = null;
+    for (var i = 0; i < calls.length; i++) {
+      if (calls[i].From || calls[i].from) { call = calls[i]; break; }
     }
+
+    if (!call) { showToast('No caller number found'); return; }
+
+    var from = call.From || call.from || '';
+    var formatted = formatPhone(from);
+    document.getElementById('phone').value = formatted;
+    showToast('\u2713 Last call: ' + formatted);
   } catch(e) {
-    showToast('Could not fetch call log');
+    showToast('Error: ' + e.message);
     console.warn('pullLastCall error:', e);
   }
 };
