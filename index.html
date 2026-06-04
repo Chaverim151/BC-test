@@ -368,9 +368,6 @@ window.initAutocomplete = function() {
             <input type="tel" id="phone" placeholder="(555) 123-4567" />
             <button class="field-clear" onclick="window.clearField('phone')" tabindex="-1">&times;</button>
           </div>
-          <button class="paste-maps-btn" onclick="window.pullLastCall()" style="margin-top:6px;border-color:#4a7fa5;color:#4a7fa5;">
-            <i class="ti ti-phone-incoming"></i> Last call <span style="font-size:9px;font-weight:700;background:#4a7fa5;color:#fff;padding:1px 5px;border-radius:3px;letter-spacing:0.5px;text-transform:uppercase;vertical-align:middle;">Beta</span>
-          </button>
           <div id="liveCallBanner" class="live-call-banner" style="display:none;">
             <i class="ti ti-phone-incoming"></i>
             <span id="liveCallNum"></span>
@@ -528,22 +525,16 @@ window.initAutocomplete = function() {
             <div id="makeLogoWrap" class="make-logo-wrap" style="display:none;">
               <img id="makeLogo" src="" alt="" />
             </div>
-            <div class="inp-wrap has-save" style="flex:1;">
-              <input type="text" id="vMake" placeholder="Type or select make..." list="makeList" autocomplete="off" oninput="window.onMakeInput()" onfocus="window.onMakeInput()" />
-              <datalist id="makeList"></datalist>
-              <button class="field-clear" onclick="window.clearMake()" tabindex="-1">&times;</button>
-              <button class="save-custom-btn" onclick="window.saveCustomMake()" title="Save this make"><i class="ti ti-plus"></i></button>
+            <div class="inp-wrap has-save" style="flex:1;" id="makeInputWrap">
+              <!-- Populated by JS based on device -->
             </div>
           </div>
         </div>
 
         <div class="field">
           <div class="lbl"><i class="ti ti-car-suv"></i> Model</div>
-          <div class="inp-wrap has-save">
-            <input type="text" id="vModel" placeholder="Type or select model..." list="modelList" autocomplete="off" />
-            <datalist id="modelList"></datalist>
-            <button class="field-clear" onclick="window.clearField('vModel')" tabindex="-1">&times;</button>
-            <button class="save-custom-btn" onclick="window.saveCustomModel()" title="Save this model"><i class="ti ti-plus"></i></button>
+          <div class="inp-wrap has-save" id="modelInputWrap">
+            <!-- Populated by JS based on device -->
           </div>
         </div>
       </div>
@@ -917,9 +908,46 @@ function populateColors(colors) {
   });
 }
 
-// ── Populate make datalist ──
+// ── Detect mobile (touch device) ──
+var isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
-// ── Car brand logo URLs (via logo.dev CDN — no API key needed) ──
+// ── Build make/model UI based on device ──
+function buildMakeModelUI() {
+  var makeWrap  = document.getElementById('makeInputWrap');
+  var modelWrap = document.getElementById('modelInputWrap');
+  if (!makeWrap || !modelWrap) return;
+
+  if (isMobile) {
+    makeWrap.innerHTML =
+      '<select id="vMake" onchange="window.onMakeChange()" style="padding-right:76px;">' +
+        '<option value="">— Select make —</option>' +
+      '</select>' +
+      '<button class="field-clear" onclick="window.clearMake()" tabindex="-1">&times;</button>' +
+      '<button class="save-custom-btn" onclick="window.saveCustomMake()" title="Save make"><i class="ti ti-plus"></i></button>';
+
+    modelWrap.innerHTML =
+      '<select id="vModel" disabled style="padding-right:76px;">' +
+        '<option value="">— Select model —</option>' +
+      '</select>' +
+      '<button class="field-clear" onclick="window.clearField(\'vModel\')" tabindex="-1">&times;</button>' +
+      '<button class="save-custom-btn" onclick="window.saveCustomModel()" title="Save model"><i class="ti ti-plus"></i></button>';
+  } else {
+    makeWrap.innerHTML =
+      '<input type="text" id="vMake" placeholder="Type or select make..." list="makeList" autocomplete="off" oninput="window.onMakeInput()" onfocus="window.onMakeInput()" />' +
+      '<datalist id="makeList"></datalist>' +
+      '<button class="field-clear" onclick="window.clearMake()" tabindex="-1">&times;</button>' +
+      '<button class="save-custom-btn" onclick="window.saveCustomMake()" title="Save make"><i class="ti ti-plus"></i></button>';
+
+    modelWrap.innerHTML =
+      '<input type="text" id="vModel" placeholder="Type or select model..." list="modelList" autocomplete="off" />' +
+      '<datalist id="modelList"></datalist>' +
+      '<button class="field-clear" onclick="window.clearField(\'vModel\')" tabindex="-1">&times;</button>' +
+      '<button class="save-custom-btn" onclick="window.saveCustomModel()" title="Save model"><i class="ti ti-plus"></i></button>';
+  }
+}
+buildMakeModelUI();
+
+// ── Populate make ──
 var MAKE_LOGOS = {
   "Acura":         "https://img.logo.dev/acura.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
   "Alfa Romeo":    "https://img.logo.dev/alfaromeo.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
