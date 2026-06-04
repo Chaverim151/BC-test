@@ -502,11 +502,8 @@ window.initAutocomplete = function() {
         <div class="grid2" style="margin-bottom:1rem;">
           <div>
             <div class="lbl"><i class="ti ti-palette"></i> Color</div>
-            <div class="inp-wrap has-save">
-              <input type="text" id="vColor" placeholder="Silver, Black..." list="colorList" autocomplete="off" />
-              <datalist id="colorList"></datalist>
-              <button class="field-clear" onclick="window.clearField('vColor')" tabindex="-1">&times;</button>
-              <button class="save-custom-btn" onclick="window.saveCustomColor()" title="Save this color"><i class="ti ti-plus"></i></button>
+            <div class="inp-wrap has-save" id="colorInputWrap">
+              <!-- Populated by JS based on device -->
             </div>
           </div>
           <div>
@@ -901,11 +898,24 @@ function showToast(msg) {
 
 // ── Populate color datalist ──
 function populateColors(colors) {
-  var dl = document.getElementById('colorList');
-  dl.innerHTML = '';
-  colors.forEach(function(c) {
-    var opt = document.createElement('option'); opt.value = c; dl.appendChild(opt);
-  });
+  if (isMobile) {
+    var sel = document.getElementById('vColor');
+    if (!sel || sel.tagName !== 'SELECT') return;
+    var current = sel.value;
+    sel.innerHTML = '<option value="">— Select color —</option>';
+    colors.filter(function(c){ return c !== 'Other'; }).forEach(function(c) {
+      var opt = document.createElement('option'); opt.value = c; opt.textContent = c; sel.appendChild(opt);
+    });
+    var otherOpt = document.createElement('option'); otherOpt.value = 'Other'; otherOpt.textContent = 'Other'; sel.appendChild(otherOpt);
+    if (current) sel.value = current;
+  } else {
+    var dl = document.getElementById('colorList');
+    if (!dl) return;
+    dl.innerHTML = '';
+    colors.forEach(function(c) {
+      var opt = document.createElement('option'); opt.value = c; dl.appendChild(opt);
+    });
+  }
 }
 
 // ── Detect mobile (touch device) ──
@@ -915,12 +925,21 @@ var isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 function buildMakeModelUI() {
   var makeWrap  = document.getElementById('makeInputWrap');
   var modelWrap = document.getElementById('modelInputWrap');
+  var colorWrap = document.getElementById('colorInputWrap');
   if (!makeWrap || !modelWrap) return;
 
   if (isMobile) {
+    if (colorWrap) colorWrap.innerHTML =
+      '<select id="vColor" style="padding-right:76px;">' +
+        '<option value="">— Select color —</option>' +
+      '</select>' +
+      '<button class="field-clear" onclick="window.clearField(\'vColor\')" tabindex="-1">&times;</button>' +
+      '<button class="save-custom-btn" onclick="window.saveCustomColor()" title="Save color"><i class="ti ti-plus"></i></button>';
+
     makeWrap.innerHTML =
       '<select id="vMake" onchange="window.onMakeChange()" style="padding-right:76px;">' +
         '<option value="">— Select make —</option>' +
+        '<option value="Other">Other</option>' +
       '</select>' +
       '<button class="field-clear" onclick="window.clearMake()" tabindex="-1">&times;</button>' +
       '<button class="save-custom-btn" onclick="window.saveCustomMake()" title="Save make"><i class="ti ti-plus"></i></button>';
@@ -928,10 +947,17 @@ function buildMakeModelUI() {
     modelWrap.innerHTML =
       '<select id="vModel" disabled style="padding-right:76px;">' +
         '<option value="">— Select model —</option>' +
+        '<option value="Other">Other</option>' +
       '</select>' +
       '<button class="field-clear" onclick="window.clearField(\'vModel\')" tabindex="-1">&times;</button>' +
       '<button class="save-custom-btn" onclick="window.saveCustomModel()" title="Save model"><i class="ti ti-plus"></i></button>';
   } else {
+    if (colorWrap) colorWrap.innerHTML =
+      '<input type="text" id="vColor" placeholder="Silver, Black..." list="colorList" autocomplete="off" />' +
+      '<datalist id="colorList"></datalist>' +
+      '<button class="field-clear" onclick="window.clearField(\'vColor\')" tabindex="-1">&times;</button>' +
+      '<button class="save-custom-btn" onclick="window.saveCustomColor()" title="Save color"><i class="ti ti-plus"></i></button>';
+
     makeWrap.innerHTML =
       '<input type="text" id="vMake" placeholder="Type or select make..." list="makeList" autocomplete="off" oninput="window.onMakeInput()" onfocus="window.onMakeInput()" />' +
       '<datalist id="makeList"></datalist>' +
@@ -1008,9 +1034,10 @@ function populateMakes(makesObj) {
     if (!sel || sel.tagName !== 'SELECT') return;
     var current = sel.value;
     sel.innerHTML = '<option value="">— Select make —</option>';
-    makes.forEach(function(m) {
+    makes.filter(function(m){ return m !== 'Other'; }).forEach(function(m) {
       var opt = document.createElement('option'); opt.value = m; opt.textContent = m; sel.appendChild(opt);
     });
+    var otherOpt = document.createElement('option'); otherOpt.value = 'Other'; otherOpt.textContent = 'Other'; sel.appendChild(otherOpt);
     if (current) sel.value = current;
   } else {
     var dl = document.getElementById('makeList');
@@ -1028,9 +1055,12 @@ function populateModels(models) {
     if (!sel || sel.tagName !== 'SELECT') return;
     sel.innerHTML = '<option value="">— Select model —</option>';
     sel.disabled = !models || models.length === 0;
-    if (models) models.forEach(function(m) {
-      var opt = document.createElement('option'); opt.value = m; opt.textContent = m; sel.appendChild(opt);
-    });
+    if (models) {
+      models.filter(function(m){ return m !== 'Other'; }).forEach(function(m) {
+        var opt = document.createElement('option'); opt.value = m; opt.textContent = m; sel.appendChild(opt);
+      });
+      var otherOpt = document.createElement('option'); otherOpt.value = 'Other'; otherOpt.textContent = 'Other'; sel.appendChild(otherOpt);
+    }
   } else {
     var dl = document.getElementById('modelList');
     if (!dl) return;
@@ -1091,8 +1121,9 @@ window.clearMake = function() {
 
 // ── Save custom color ──
 window.saveCustomColor = async function() {
-  var color = document.getElementById('vColor').value.trim();
-  if (!color) { showToast('Enter a color first'); return; }
+  var color = isMobile ? prompt('Enter color to save:') : document.getElementById('vColor').value.trim();
+  if (!color || !color.trim()) { showToast('Enter a color first'); return; }
+  color = color.trim();
   try {
     const snap = await get(ref(db, 'colors'));
     var colors = snap.exists() ? snap.val() : [];
