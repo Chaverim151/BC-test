@@ -1000,42 +1000,92 @@ function updateMakeLogo(make) {
   }
 }
 
-// ── Populate make datalist ──
+// ── Populate make — handles both select (mobile) and datalist (desktop) ──
 function populateMakes(makesObj) {
-  var dl = document.getElementById('makeList');
-  dl.innerHTML = '';
-  Object.keys(makesObj).sort().forEach(function(m) {
-    var opt = document.createElement('option'); opt.value = m; dl.appendChild(opt);
-  });
+  var makes = Object.keys(makesObj).sort();
+  if (isMobile) {
+    var sel = document.getElementById('vMake');
+    if (!sel || sel.tagName !== 'SELECT') return;
+    var current = sel.value;
+    sel.innerHTML = '<option value="">— Select make —</option>';
+    makes.forEach(function(m) {
+      var opt = document.createElement('option'); opt.value = m; opt.textContent = m; sel.appendChild(opt);
+    });
+    if (current) sel.value = current;
+  } else {
+    var dl = document.getElementById('makeList');
+    if (!dl) return;
+    dl.innerHTML = '';
+    makes.forEach(function(m) {
+      var opt = document.createElement('option'); opt.value = m; dl.appendChild(opt);
+    });
+  }
 }
 
-// ── On make input → populate model datalist + logo ──
-window.onMakeInput = function() {
-  var make = document.getElementById('vMake').value.trim();
-  var dl = document.getElementById('modelList');
-  dl.innerHTML = '';
-  document.getElementById('vModel').value = '';
+function populateModels(models) {
+  if (isMobile) {
+    var sel = document.getElementById('vModel');
+    if (!sel || sel.tagName !== 'SELECT') return;
+    sel.innerHTML = '<option value="">— Select model —</option>';
+    sel.disabled = !models || models.length === 0;
+    if (models) models.forEach(function(m) {
+      var opt = document.createElement('option'); opt.value = m; opt.textContent = m; sel.appendChild(opt);
+    });
+  } else {
+    var dl = document.getElementById('modelList');
+    if (!dl) return;
+    dl.innerHTML = '';
+    if (models) models.forEach(function(m) {
+      var opt = document.createElement('option'); opt.value = m; dl.appendChild(opt);
+    });
+  }
+}
+
+// ── On make change (mobile select) ──
+window.onMakeChange = function() {
+  var make = document.getElementById('vMake').value;
   updateMakeLogo(make);
-  // Always repopulate make datalist so backspace still shows options
-  var makeDl = document.getElementById('makeList');
-  makeDl.innerHTML = '';
-  Object.keys(window.makesData).sort().forEach(function(m) {
-    var opt = document.createElement('option'); opt.value = m; makeDl.appendChild(opt);
-  });
+  var modelEl = document.getElementById('vModel');
+  if (modelEl && modelEl.tagName === 'SELECT') { modelEl.innerHTML = '<option value="">— Select model —</option>'; modelEl.disabled = true; }
   if (!make || !window.makesData[make]) return;
   var models = window.makesData[make];
   if (models.models) models = models.models;
   if (!Array.isArray(models)) return;
-  models.forEach(function(m) {
-    var opt = document.createElement('option'); opt.value = m; dl.appendChild(opt);
-  });
+  populateModels(models);
+  if (modelEl && modelEl.tagName === 'SELECT') modelEl.disabled = false;
+};
+
+// ── On make input (desktop datalist) ──
+window.onMakeInput = function() {
+  var make = document.getElementById('vMake').value.trim();
+  updateMakeLogo(make);
+  // Repopulate make datalist (so backspace still shows all)
+  var makeDl = document.getElementById('makeList');
+  if (makeDl) {
+    makeDl.innerHTML = '';
+    Object.keys(window.makesData).sort().forEach(function(m) {
+      var opt = document.createElement('option'); opt.value = m; makeDl.appendChild(opt);
+    });
+  }
+  var modelEl = document.getElementById('vModel');
+  if (modelEl) modelEl.value = '';
+  if (!make || !window.makesData[make]) { populateModels([]); return; }
+  var models = window.makesData[make];
+  if (models.models) models = models.models;
+  if (!Array.isArray(models)) return;
+  populateModels(models);
 };
 
 // ── Clear make + model ──
 window.clearMake = function() {
-  document.getElementById('vMake').value = '';
-  document.getElementById('vModel').value = '';
-  document.getElementById('modelList').innerHTML = '';
+  var makeEl = document.getElementById('vMake');
+  var modelEl = document.getElementById('vModel');
+  if (makeEl) makeEl.value = '';
+  if (modelEl) {
+    if (modelEl.tagName === 'SELECT') { modelEl.innerHTML = '<option value="">— Select model —</option>'; modelEl.disabled = true; }
+    else { modelEl.value = ''; }
+  }
+  var dl = document.getElementById('modelList'); if (dl) dl.innerHTML = '';
   updateMakeLogo('');
 };
 
@@ -1076,10 +1126,12 @@ window.saveCustomMake = async function() {
 
 // ── Save custom model ──
 window.saveCustomModel = async function() {
-  var make = document.getElementById('vMake').value.trim();
-  var model = document.getElementById('vModel').value.trim();
-  if (!make) { showToast('Enter a make first'); return; }
-  if (!model) { showToast('Type a model name first'); return; }
+  var makeEl = document.getElementById('vMake');
+  var make = makeEl ? makeEl.value.trim() : '';
+  if (!make) { showToast('Select a make first'); return; }
+  var model = isMobile ? prompt('Enter model name to save under ' + make + ':') : document.getElementById('vModel').value.trim();
+  if (!model || !model.trim()) { showToast('Enter a model name'); return; }
+  model = model.trim();
   try {
     const snap = await get(ref(db, 'makes/' + make));
     var models = snap.exists() ? snap.val() : [];
@@ -1091,7 +1143,8 @@ window.saveCustomModel = async function() {
     models.push(model); models.sort();
     await set(ref(db, 'makes/' + make), models);
     window.makesData[make] = models;
-    window.onMakeInput();
+    populateModels(models);
+    if (!isMobile) window.onMakeInput();
     showToast('\u2713 Saved model "' + model + '"');
   } catch(e) { showToast('Could not save — check connection'); }
 };
@@ -1103,9 +1156,9 @@ window.toggleOtherVehicle = function() {
   document.getElementById('otherVehicleBar').classList.toggle('active', window.isOtherVehicle);
   document.getElementById('vehicleFields').classList.toggle('on', window.isOtherVehicle);
   if (!window.isOtherVehicle) {
-    ['vColor','vYear','vMake','vModel'].forEach(function(id){ document.getElementById(id).value = ''; });
-    document.getElementById('modelList').innerHTML = '';
-    updateMakeLogo('');
+    window.clearMake();
+    var colorEl = document.getElementById('vColor'); if (colorEl) colorEl.value = '';
+    var yearEl = document.getElementById('vYear'); if (yearEl) yearEl.value = '';
   }
 };
 
@@ -1390,16 +1443,11 @@ window.verifyLocation = function() {
 };
 
 window.clearForm = async function() {
-  ['phone','location','callerName','notes','vYear','vColor','vMake','vModel','acQuantity','floodEquipment','customNature'].forEach(function(id){
+  ['phone','location','callerName','notes','vYear','vColor','acQuantity','floodEquipment','customNature'].forEach(function(id){
     var el = document.getElementById(id); if (el) el.value = '';
   });
-  document.getElementById('vMake').value = '';
-  document.getElementById('vModel').value = '';
-  document.getElementById('modelList').innerHTML = '';
-  updateMakeLogo('');
+  window.clearMake();
   document.getElementById('natureType').value = '';
-  // clear model datalist
-  document.getElementById('modelList').innerHTML = '';
 
   window.lockedInsideNote = '';
   window.isUrgent = false;
