@@ -1,0 +1,1738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Chaverim Bergen County — Emergency Dispatch</title>
+<link rel="icon" type="image/png" href="https://i.ibb.co/Kc2B52nS/download-1.png" />
+<link rel="apple-touch-icon" href="https://i.ibb.co/Kc2B52nS/download-1.png" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css" />
+<script>
+// Must be global for Google Maps callback — defined before the API script loads
+window.initAutocomplete = function() {
+  var input = document.getElementById('location');
+  if (!input || !window.google) return;
+
+  var autocomplete = new google.maps.places.Autocomplete(input, {
+    types: ['geocode', 'establishment'],
+    componentRestrictions: { country: 'us' },
+    fields: ['formatted_address', 'geometry', 'name']
+  });
+
+  autocomplete.addListener('place_changed', function() {
+    var place = autocomplete.getPlace();
+    if (!place.geometry) return;
+    var address = place.formatted_address || place.name || input.value;
+    input.value = address;
+    input.dataset.lat = place.geometry.location.lat();
+    input.dataset.lng = place.geometry.location.lng();
+  });
+};
+</script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAFAsM0xqmKrnirTKIH9If2s4GuDpmO6BQ&libraries=places&loading=async&callback=initAutocomplete" async defer></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F2ECD8; min-height: 100vh; -webkit-text-size-adjust: 100%; }
+  button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  a { -webkit-tap-highlight-color: transparent; }
+
+  /* ── Header ── */
+  .header { background: #0F0E06; border-bottom: 2.5px solid #C8A532; padding: 1rem 1.5rem; display: flex; align-items: center; gap: 16px; }
+  .logo-badge { width: 58px; height: 58px; border-radius: 12px; overflow: hidden; flex-shrink: 0; border: 2px solid #C8A532; }
+  .logo-badge img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .brand-name { font-size: 22px; font-weight: 600; color: #C8A532; line-height: 1.1; }
+  .brand-sub { font-size: 10px; color: #C8A532; letter-spacing: 2.5px; text-transform: uppercase; opacity: 0.6; margin-top: 2px; }
+  .brand-tag { font-size: 11px; color: #7A6830; margin-top: 3px; }
+
+  /* ── Telzio live call ── */
+  .telzio-status { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; margin-left: 6px; }
+  .telzio-status.live { color: #2E7D32; }
+  .telzio-status.live::before { content: ''; width: 7px; height: 7px; background: #4CAF50; border-radius: 50%; animation: pulse-green 1.5s infinite; display: inline-block; }
+  .telzio-status.offline { color: #9A8030; }
+  @keyframes pulse-green { 0%,100%{opacity:1;transform:scale(1);} 50%{opacity:0.5;transform:scale(1.3);} }
+  .live-call-banner { display: flex; align-items: center; gap: 8px; background: #0A1F0A; border: 1px solid #2E7D32; border-radius: 8px; padding: 7px 10px; margin-top: 6px; font-size: 13px; color: #81C784; }
+  .live-call-banner i { font-size: 15px; color: #4CAF50; }
+  .live-call-banner span { flex: 1; font-weight: 500; letter-spacing: 0.3px; }
+  .use-call-btn { background: #2E7D32; border: none; border-radius: 6px; padding: 4px 10px; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; white-space: nowrap; }
+  .use-call-btn:hover { background: #388E3C; }
+
+  /* ── Custom color dropdown ── */
+  .color-dropdown { position: relative; width: 100%; }
+  .color-dropdown-btn { width: 100%; padding: 11px 44px 11px 14px; border: 1.5px solid #E0CC80; border-radius: 10px; font-size: 14px; background: #FFFEF5; color: #1A1400; font-family: inherit; cursor: pointer; display: flex; align-items: center; gap: 10px; text-align: left; transition: border-color 0.15s, box-shadow 0.15s; -webkit-appearance: none; }
+  .color-dropdown-btn:focus { outline: none; border-color: #C8A532; box-shadow: 0 0 0 3px rgba(200,165,50,0.16); }
+  .color-dropdown-btn .chevron { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #C8A532; font-size: 14px; pointer-events: none; transition: transform 0.2s; }
+  .color-dropdown-btn.open .chevron { transform: translateY(-50%) rotate(180deg); }
+  .color-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; border: 1.5px solid rgba(0,0,0,0.12); }
+  .color-dropdown-menu { display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: #FFFFFF; border: 1.5px solid #E0CC80; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); z-index: 500; overflow: hidden; max-height: 260px; overflow-y: auto; }
+  .color-dropdown-menu.open { display: block; }
+  .color-option { display: flex; align-items: center; gap: 10px; padding: 9px 14px; cursor: pointer; font-size: 14px; color: #1A1400; transition: background 0.1s; }
+  .color-option:hover { background: #F5ECC0; }
+  .color-option.selected { background: #F0E8C0; font-weight: 600; }
+
+  /* ── Google Places Autocomplete overrides ── */
+  .pac-container { border-radius: 10px; border: 1.5px solid #E0CC80; box-shadow: 0 4px 20px rgba(0,0,0,0.12); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin-top: 4px; background: #FFFEF5; z-index: 9999; }
+  .pac-item { padding: 10px 14px; font-size: 14px; color: #1A1400; cursor: pointer; border-top: 1px solid #F0E8C0; }
+  .pac-item:first-child { border-top: none; }
+  .pac-item:hover, .pac-item-selected { background: #F5ECC0; }
+  .pac-item-query { font-size: 14px; color: #1A1400; font-weight: 600; }
+  .pac-matched { color: #C8A532; }
+  .pac-icon { display: none; }
+
+  /* ── Beta tag ── */
+  .beta-tag { display: inline-block; background: #C8A532; color: #0F0E06; font-size: 9px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; vertical-align: middle; margin-left: 6px; position: relative; top: -2px; }
+  .db-loading { display: flex; align-items: center; gap: 8px; background: #1A1600; border: 1px solid #3A3010; border-radius: 10px; padding: 0.6rem 1rem; margin-bottom: 1rem; font-size: 12px; color: #9A8030; }
+  .db-loading.hidden { display: none; }
+  .spinner { width: 14px; height: 14px; border: 2px solid #3A3010; border-top-color: #C8A532; border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Page ── */
+  .page { max-width: 680px; margin: 0 auto; padding: 1.5rem 1.25rem 3rem; }
+  .section-row { display: flex; align-items: center; gap: 8px; margin-bottom: 1rem; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #C8A532; }
+  .section-lbl { font-size: 10px; font-weight: 600; color: #8B6E1A; letter-spacing: 2px; text-transform: uppercase; }
+
+  /* ── Card ── */
+  .form-card { background: #fff; border-radius: 18px; border: 1px solid #DDD09A; overflow: hidden; box-shadow: 0 4px 24px rgba(180,140,20,0.10); }
+  .card-hdr { background: #0F0E06; padding: 1rem 1.25rem; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #221E08; }
+  .card-ttl { color: #C8A532; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .card-ttl i { font-size: 18px; }
+  .card-body { padding: 1.4rem 1.4rem 1.25rem; background: #FDFBF0; }
+
+  /* ── Call number badge ── */
+  .callnum-wrap { position: relative; }
+  .callnum-badge { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 10px; color: #9A8030; background: #F0E8C0; border-radius: 6px; padding: 3px 7px; font-weight: 600; letter-spacing: 0.5px; pointer-events: none; }
+
+  /* ── Urgent banner ── */
+  .urgent-bar { display: flex; align-items: center; justify-content: space-between; background: #1A0A00; border: 1.5px solid #8B2000; border-radius: 12px; padding: 0.75rem 1rem; margin-bottom: 1.1rem; cursor: pointer; transition: all 0.15s; user-select: none; }
+  .urgent-bar.active { background: #3A0A00; border-color: #E03000; box-shadow: 0 0 0 3px rgba(220,50,0,0.18); }
+  .urgent-left { display: flex; align-items: center; gap: 10px; }
+  .urgent-left i { font-size: 20px; color: #E05000; }
+  .urgent-bar.active .urgent-left i { color: #FF4400; }
+  .urgent-label { font-size: 14px; font-weight: 600; color: #C87040; }
+  .urgent-bar.active .urgent-label { color: #FF6030; }
+  .urgent-sub { font-size: 11px; color: #8B5030; margin-top: 1px; }
+  .urgent-bar.active .urgent-sub { color: #C05030; }
+  .toggle { width: 44px; height: 24px; background: #3A2010; border-radius: 12px; position: relative; transition: background 0.2s; flex-shrink: 0; }
+  .urgent-bar.active .toggle { background: #E03000; }
+  .toggle::after { content: ''; position: absolute; width: 18px; height: 18px; background: #C87040; border-radius: 50%; top: 3px; left: 3px; transition: all 0.2s; }
+  .urgent-bar.active .toggle::after { left: 23px; background: #fff; }
+
+  /* ── Clear btn ── */
+  .clear-btn { background: transparent; border: 1px solid #2E2C12; border-radius: 8px; padding: 5px 14px; color: #7A6830; font-size: 12px; cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 5px; transition: all 0.15s; }
+  .clear-btn:hover { border-color: #C8A532; color: #C8A532; }
+
+  /* ── Fields ── */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 1.1rem; }
+  .field { margin-bottom: 1.1rem; }
+  .field:last-child { margin-bottom: 0; }
+  .lbl { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: #6B5515; margin-bottom: 6px; }
+  .lbl i { font-size: 14px; color: #C8A532; }
+  .req { color: #C8A532; }
+
+  input[type=text], input[type=tel], input[type=number], textarea, select {
+    width: 100%; padding: 11px 14px; border: 1.5px solid #E0CC80; border-radius: 10px;
+    font-size: 14px; background: #FFFEF5; color: #1A1400; font-family: inherit;
+    transition: border-color 0.15s, box-shadow 0.15s; -webkit-appearance: none; appearance: none;
+  }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: #C8A532; box-shadow: 0 0 0 3px rgba(200,165,50,0.16); background: #FFFFFF; }
+  input::placeholder, textarea::placeholder { color: #C0A860; opacity: 0.7; }
+  textarea { resize: vertical; min-height: 80px; line-height: 1.55; }
+  select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23C8A532' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 14px center; cursor: pointer; padding-right: 36px;
+  }
+  select:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ── Location ── */
+  .loc-wrap { position: relative; }
+  .loc-wrap input { padding-right: 72px; }
+  .map-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: #0F0E06; border: none; border-radius: 7px; padding: 6px 10px; color: #C8A532; font-size: 11px; cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 3px; white-space: nowrap; font-weight: 600; }
+  .map-btn:hover { background: #1E1C08; }
+
+  /* ── Section subheader ── */
+  .sub-hdr { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 600; color: #8B6E1A; letter-spacing: 1.5px; text-transform: uppercase; margin: 1.2rem 0 0.9rem; }
+  .sub-hdr::before { content: ''; width: 3px; height: 14px; background: #C8A532; border-radius: 2px; }
+  .sub-hdr::after { content: ''; flex: 1; height: 1px; background: #E5D488; opacity: 0.7; }
+
+  /* ── Vehicle info row ── */
+  .vehicle-fields { display: none; }
+  .vehicle-fields.on { display: block; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 1.1rem; }
+
+  /* ── Flat tire / lockout chips ── */
+  .tire-opts, .lockout-type { display: none; gap: 8px; margin-bottom: 1.1rem; flex-wrap: wrap; }
+  .tire-opts.on { display: flex; }
+  .lockout-type.on { display: flex; }
+  .chip { padding: 7px 14px; border-radius: 20px; border: 1.5px solid #E0CC80; background: #FFFEF5; color: #6B5515; font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+  .chip.selected { background: #C8A532; border-color: #C8A532; color: #0F0E06; font-weight: 600; }
+  .chip:hover:not(.selected) { border-color: #C8A532; color: #8B6E1A; }
+
+  /* ── Conditional fields ── */
+  .ac-qty { display: none; }
+  .ac-qty.on { display: block; }
+
+  /* ── Make logo ── */
+  .make-logo-row { display: flex; align-items: center; gap: 10px; }
+  .make-logo-wrap { width: 48px; height: 48px; background: #fff; border: 1.5px solid #E0CC80; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; padding: 4px; }
+  .make-logo-wrap img { width: 100%; height: 100%; object-fit: contain; }
+
+  /* ── Paste Maps button ── */
+  .paste-maps-btn { margin-top: 6px; display: flex; align-items: center; gap: 6px; background: transparent; border: 1.5px dashed #C8A532; border-radius: 8px; padding: 6px 12px; color: #8B6E1A; font-size: 12px; font-weight: 500; cursor: pointer; font-family: inherit; transition: all 0.15s; width: 100%; justify-content: center; }
+  .paste-maps-btn:hover { background: #F5ECC0; border-style: solid; color: #6B5515; }
+  .paste-maps-btn i { font-size: 14px; }
+
+  /* ── Trapped modal ── */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(10,9,3,0.75); z-index: 1000; align-items: center; justify-content: center; padding: 1.25rem; backdrop-filter: blur(4px); }
+  .modal-overlay.on { display: flex; }
+  .modal { background: #FDFBF0; border-radius: 18px; border: 1px solid #DDD09A; width: 100%; max-width: 380px; box-shadow: 0 20px 60px rgba(0,0,0,0.45); overflow: hidden; animation: slideUp 0.2s ease; }
+  @keyframes slideUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+  .modal-hdr { background: #0F0E06; padding: 1rem 1.25rem; border-bottom: 1px solid #2A2810; display: flex; align-items: center; gap: 10px; }
+  .modal-hdr i { font-size: 22px; color: #E05000; }
+  .modal-hdr-txt { color: #C8A532; font-size: 15px; font-weight: 600; }
+  .modal-body { padding: 1.25rem; text-align: center; }
+  .modal-question { font-size: 16px; font-weight: 600; color: #1A1400; margin-bottom: 6px; }
+  .modal-sub { font-size: 13px; color: #8B6E1A; margin-bottom: 1.25rem; }
+  .modal-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .modal-btn { padding: 13px; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; transition: all 0.15s; }
+  .modal-btn:active { transform: scale(0.97); }
+  .modal-btn-yes { background: #E03000; color: #fff; }
+  .modal-btn-yes:hover { background: #C02800; }
+  .modal-btn-no { background: #1A1400; color: #C8A532; border: 1.5px solid #3A3010; }
+  .modal-btn-no:hover { background: #2A2000; }
+
+  /* ── Per-field clear button ── */
+  .inp-wrap { position: relative; display: flex; align-items: center; }
+  .inp-wrap input, .inp-wrap textarea { padding-right: 32px; }
+  .inp-wrap.has-save input { padding-right: 72px; }
+  .field-clear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #BBA860; font-size: 16px; cursor: pointer; padding: 2px 4px; line-height: 1; opacity: 0; pointer-events: none; transition: opacity 0.15s, color 0.15s; font-family: inherit; }
+  .inp-wrap.has-save .field-clear { right: 44px; }
+  .inp-wrap textarea ~ .field-clear { top: 12px; transform: none; }
+  .field-clear:hover { color: #C8A532; }
+  .inp-wrap input:not(:placeholder-shown) ~ .field-clear,
+  .inp-wrap textarea:not(:placeholder-shown) ~ .field-clear { opacity: 1; pointer-events: auto; }
+
+  /* ── Save custom btn ── */
+  .save-custom-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: #0F0E06; border: 1px solid #3A3010; border-radius: 7px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; color: #C8A532; cursor: pointer; font-size: 14px; padding: 0; transition: all 0.15s; }
+  .save-custom-btn:hover { background: #C8A532; color: #0F0E06; }
+  .save-custom-btn i { font-size: 14px; }
+  .inp-wrap.has-save .field-clear { right: 44px; }
+
+  /* ── Toast notification ── */
+  .toast { position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%) translateY(20px); background: #0F0E06; color: #C8A532; border: 1px solid #3A3010; border-radius: 10px; padding: 0.6rem 1.2rem; font-size: 13px; font-weight: 500; opacity: 0; transition: all 0.25s; pointer-events: none; z-index: 9999; white-space: nowrap; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ── Divider ── */
+  .divider { height: 1px; background: #E5D488; margin: 1.1rem 0; opacity: 0.6; }
+
+  /* ── Buttons ── */
+  .actions { display: flex; flex-direction: column; gap: 10px; }
+  .btn { display: flex; align-items: center; justify-content: center; gap: 9px; padding: 15px 20px; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; border: none; width: 100%; font-family: inherit; transition: all 0.15s; }
+  .btn i { font-size: 19px; }
+  .btn:active { transform: scale(0.98); }
+  .btn-wa { background: #C8A532; color: #0F0E06; }
+  .btn-wa:hover { background: #D8B540; }
+  .btn-int { background: #0F0E06; color: #C8A532; border: 1.5px solid #2E2A10; }
+  .btn-int:hover { background: #1C1A08; }
+
+  /* ── Preview ── */
+  .preview { background: #0F0E06; border-radius: 14px; padding: 1.1rem 1.25rem; margin-top: 1.1rem; display: none; border: 1px solid #2A2810; }
+  .preview.on { display: block; }
+  .preview-lbl { font-size: 10px; color: #6A5A20; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .preview-lbl::after { content: ''; flex: 1; height: 1px; background: #2A2810; }
+  .preview-txt { font-size: 12.5px; color: #E8D98A; font-family: 'SF Mono','Fira Code',monospace; white-space: pre-wrap; line-height: 1.7; }
+
+  /* ── Responsive / Mobile ── */
+  @media (max-width: 600px) {
+    /* Page */
+    .page { padding: 0.75rem 0.6rem 2rem; }
+
+    /* Header */
+    .header { padding: 0.8rem 0.9rem; gap: 10px; }
+    .logo-badge { width: 44px; height: 44px; border-radius: 9px; }
+    .brand-name { font-size: 18px; }
+    .brand-sub { font-size: 9px; letter-spacing: 1.5px; }
+    .brand-tag { font-size: 10px; }
+
+    /* Card */
+    .card-hdr { padding: 0.75rem 1rem; }
+    .card-ttl { font-size: 13px; }
+    .card-body { padding: 1rem; }
+
+    /* Grids → single column */
+    .grid2, .grid3 { grid-template-columns: 1fr; gap: 0; }
+    .grid2 > div:not(:last-child),
+    .grid3 > div:not(:last-child) { margin-bottom: 1rem; }
+
+    /* Inputs — bigger tap targets */
+    input[type=text], input[type=tel], input[type=number], textarea, select {
+      font-size: 16px; /* prevents iOS zoom */
+      padding: 12px 14px;
+    }
+    .inp-wrap.has-save input,
+    .inp-wrap.has-save select { padding-right: 76px; }
+
+    /* Location row */
+    .loc-wrap input { padding-right: 72px !important; }
+    .map-btn { padding: 7px 9px; font-size: 11px; }
+
+    /* Paste maps buttons */
+    .paste-maps-btn { font-size: 11px; padding: 7px 8px; }
+
+    /* Chips — wrap nicely */
+    .tire-opts, .lockout-type, #houseLockSide { flex-wrap: wrap; gap: 6px; }
+    .chip { font-size: 13px; padding: 8px 14px; flex: 1 1 auto; text-align: center; min-width: 0; }
+
+    /* Urgent bar */
+    .urgent-bar { padding: 0.65rem 0.9rem; }
+    .urgent-label { font-size: 13px; }
+    .urgent-sub { font-size: 10px; }
+
+    /* Make logo + input row */
+    .make-logo-row { gap: 8px; }
+    .make-logo-wrap { width: 40px; height: 40px; }
+
+    /* Dispatch buttons */
+    .btn { padding: 14px; font-size: 14px; }
+    .btn i { font-size: 17px; }
+
+    /* Preview */
+    .preview { padding: 0.9rem 1rem; }
+    .preview-txt { font-size: 12px; }
+
+    /* Modal */
+    .modal { border-radius: 14px; }
+    .modal-body { padding: 1rem; }
+    .modal-question { font-size: 15px; }
+    .modal-btns { grid-template-columns: 1fr; gap: 8px; }
+    .modal-btn { padding: 13px; font-size: 14px; }
+
+    /* Toast */
+    .toast { font-size: 12px; padding: 0.5rem 1rem; white-space: normal; text-align: center; width: 85%; }
+
+    /* Sub header */
+    .sub-hdr { font-size: 10px; margin: 1rem 0 0.75rem; }
+
+    /* Clear btn in card header */
+    .clear-btn { padding: 5px 10px; font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="toast" id="toast"></div>
+
+<div class="header">
+  <div class="logo-badge"><img src="https://i.ibb.co/Kc2B52nS/download-1.png" alt="Chaverim Bergen County logo" /></div>
+  <div>
+    <div class="brand-name">Chaverim <span class="beta-tag">Beta</span></div>
+    <div class="brand-sub">Bergen County</div>
+    <div class="brand-tag">Dispatch Center</div>
+  </div>
+</div>
+
+<div class="page">
+  <div class="section-row">
+    <div class="dot"></div>
+    <div class="section-lbl">New call</div>
+  </div>
+
+  <div class="form-card">
+    <div class="card-hdr">
+      <div class="card-ttl"><i class="ti ti-alert-triangle"></i> Dispatch Form</div>
+      <button class="clear-btn" onclick="window.clearForm()"><i class="ti ti-refresh" style="font-size:13px;"></i> Clear Call</button>
+    </div>
+
+    <div class="card-body">
+
+      <!-- DB loading indicator -->
+      <div class="db-loading" id="dbLoading">
+        <div class="spinner"></div>
+        <span>Loading data from database...</span>
+      </div>
+
+      <!-- Urgent toggle -->
+      <div class="urgent-bar" id="urgentBar" onclick="window.toggleUrgent()">
+        <div class="urgent-left">
+          <i class="ti ti-siren"></i>
+          <div>
+            <div class="urgent-label">URGENT</div>
+            <div class="urgent-sub">Mark this call as high priority</div>
+          </div>
+        </div>
+        <div class="toggle"></div>
+      </div>
+
+      <!-- Call # + Phone -->
+      <div class="grid2">
+        <div>
+          <div class="lbl"><i class="ti ti-hash"></i> Call # <span class="req">*</span></div>
+          <div class="inp-wrap callnum-wrap">
+            <input type="text" id="callNum" placeholder="Loading..." />
+            <button class="field-clear" onclick="window.clearField('callNum')" tabindex="-1">&times;</button>
+            <span class="callnum-badge" id="callNumBadge">AUTO</span>
+          </div>
+        </div>
+        <div>
+          <div class="lbl">
+            <i class="ti ti-phone"></i> Phone
+            <span id="telzioStatus" class="telzio-status"></span>
+          </div>
+          <div class="inp-wrap">
+            <input type="tel" id="phone" placeholder="(555) 123-4567" />
+            <button class="field-clear" onclick="window.clearField('phone')" tabindex="-1">&times;</button>
+          </div>
+          <div id="liveCallBanner" class="live-call-banner" style="display:none;">
+            <i class="ti ti-phone-incoming"></i>
+            <span id="liveCallNum"></span>
+            <button onclick="window.fillFromLiveCall()" class="use-call-btn">Use this number</button>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- Location -->
+      <div class="field">
+        <div class="lbl"><i class="ti ti-map-pin"></i> Location <span class="req">*</span></div>
+        <div class="inp-wrap loc-wrap">
+          <input type="text" id="location" placeholder="123 Main St, Edison, NJ" style="padding-right:90px;" oninput="document.getElementById('location').dataset.lat=''; document.getElementById('location').dataset.lng='';" />
+          <button class="field-clear" onclick="window.clearField('location')" tabindex="-1" style="right:56px;">&times;</button>
+          <button class="map-btn" onclick="window.verifyLocation()"><i class="ti ti-map-pin" style="font-size:12px;"></i> Map</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;">
+          <button class="paste-maps-btn" onclick="window.pasteMapsUrl()" style="margin-top:0;">
+            <i class="ti ti-clipboard"></i> Paste Maps link
+          </button>
+          <button class="paste-maps-btn" onclick="window.open('https://i911.com','_blank')" style="margin-top:0;border-color:#4a7fa5;color:#4a7fa5;">
+            <i class="ti ti-location"></i> Request via i911
+          </button>
+        </div>
+      </div>
+
+      <!-- Caller name -->
+      <div class="field">
+        <div class="lbl"><i class="ti ti-user"></i> Caller name</div>
+        <div class="inp-wrap">
+          <input type="text" id="callerName" placeholder="John Doe" />
+          <button class="field-clear" onclick="window.clearField('callerName')" tabindex="-1">&times;</button>
+        </div>
+      </div>
+
+      <!-- Nature of call -->
+      <div class="field">
+        <div class="lbl"><i class="ti ti-list"></i> Nature of call <span class="req">*</span></div>
+        <select id="natureType" onchange="window.onNatureChange()">
+          <option value="">— Select type —</option>
+          <optgroup label="Vehicle">
+            <option value="flat_tire">Flat Tire</option>
+            <option value="boost">Boost / Jump Start</option>
+            <option value="out_of_gas">Out of Gas</option>
+            <option value="lockout">Lockout</option>
+            <option value="vehicle_stalled">Vehicle Stalled</option>
+            <option value="vehicle_pullout">Vehicle Pullout</option>
+            <option value="plastic_hanging">Plastic Hanging</option>
+            <option value="bumper_hanging">Bumper Hanging</option>
+          </optgroup>
+          <optgroup label="Community / Home">
+            <option value="flood">Flood</option>
+            <option value="heater">Heater Request</option>
+            <option value="ac">AC Request</option>
+          </optgroup>
+          <optgroup label="Other">
+            <option value="other">Other</option>
+          </optgroup>
+        </select>
+      </div>
+
+      <!-- Custom nature field (shown when "Other" selected) -->
+      <div class="ac-qty" id="customNatureWrap">
+        <div class="field">
+          <div class="lbl"><i class="ti ti-pencil"></i> Describe the call <span class="req">*</span></div>
+          <div class="inp-wrap">
+            <input type="text" id="customNature" placeholder="Describe the nature of the call..." />
+            <button class="field-clear" onclick="window.clearField('customNature')" tabindex="-1">&times;</button>
+          </div>
+        </div>
+        <div class="urgent-bar" id="otherVehicleBar" onclick="window.toggleOtherVehicle()" style="margin-bottom:0.75rem;padding:0.6rem 1rem;">
+          <div class="urgent-left">
+            <i class="ti ti-car" style="font-size:17px;color:#C8A532;"></i>
+            <div>
+              <div class="urgent-label" style="font-size:13px;">Vehicle related?</div>
+              <div class="urgent-sub">Show vehicle info fields</div>
+            </div>
+          </div>
+          <div class="toggle" id="otherVehicleToggle"></div>
+        </div>
+      </div>
+
+      <!-- Flat tire: spare chips -->
+      <div class="tire-opts" id="tireOpts">
+        <div class="lbl" style="width:100%;margin-bottom:4px;"><i class="ti ti-tools"></i> Spare tire?</div>
+        <button class="chip" onclick="window.selectChip(event,'spare','with_spare','With spare')">With spare</button>
+        <button class="chip" onclick="window.selectChip(event,'spare','no_spare','No spare')">No spare</button>
+        <button class="chip" onclick="window.selectChip(event,'spare','no_spare_needs_ez','No spare — needs EZ spare')">No spare, needs EZ spare</button>
+      </div>
+
+      <!-- Lockout: vehicle or house -->
+      <div class="lockout-type" id="lockoutType">
+        <div class="lbl" style="width:100%;margin-bottom:4px;"><i class="ti ti-key"></i> Lockout type</div>
+        <button class="chip" onclick="window.selectChip(event,'lockout_type','vehicle_lockout','Vehicle lockout')">Vehicle</button>
+        <button class="chip" onclick="window.selectChip(event,'lockout_type','house_lockout','House lockout')">House</button>
+      </div>
+
+      <!-- House lockout: interior or exterior -->
+      <div class="tire-opts" id="houseLockSide">
+        <div class="lbl" style="width:100%;margin-bottom:4px;"><i class="ti ti-door"></i> Lock location</div>
+        <button class="chip" onclick="window.selectChip(event,'house_side','interior','Interior lock')">Interior lock</button>
+        <button class="chip" onclick="window.selectChip(event,'house_side','exterior','Exterior lock')">Exterior lock</button>
+      </div>
+
+      <!-- Flood: equipment needed -->
+      <div class="ac-qty" id="floodEquip">
+        <div class="field">
+          <div class="lbl"><i class="ti ti-tools"></i> Equipment needed <span style="font-weight:400;color:#9A8050;">(if any)</span></div>
+          <div class="inp-wrap">
+            <input type="text" id="floodEquipment" placeholder="e.g. pumps, wet vac, towels..." />
+            <button class="field-clear" onclick="window.clearField('floodEquipment')" tabindex="-1">&times;</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quantity (heater / AC) -->
+      <div class="ac-qty" id="qtyField">
+        <div class="field">
+          <div class="lbl"><i class="ti ti-stack"></i> <span id="qtyLabel">Quantity needed</span></div>
+          <div class="inp-wrap">
+            <input type="number" id="acQuantity" placeholder="How many?" min="1" max="99" />
+            <button class="field-clear" onclick="window.clearField('acQuantity')" tabindex="-1">&times;</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Vehicle details -->
+      <div class="vehicle-fields" id="vehicleFields">
+        <div class="sub-hdr">Vehicle info</div>
+
+        <div class="grid2" style="margin-bottom:1rem;">
+          <div>
+            <div class="lbl"><i class="ti ti-palette"></i> Color</div>
+            <div class="inp-wrap has-save" id="colorInputWrap">
+              <!-- Populated by JS based on device -->
+            </div>
+            <div id="customColorWrap" style="display:none;margin-top:6px;">
+              <input type="text" id="customColor" placeholder="Enter color..." style="font-size:14px;" />
+            </div>
+          </div>
+          <div>
+            <div class="lbl"><i class="ti ti-calendar"></i> Year</div>
+            <div class="inp-wrap">
+              <input type="text" id="vYear" placeholder="2022" maxlength="4" />
+              <button class="field-clear" onclick="window.clearField('vYear')" tabindex="-1">&times;</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Make with logo -->
+        <div class="field">
+          <div class="lbl"><i class="ti ti-car"></i> Make</div>
+          <div class="make-logo-row">
+            <div id="makeLogoWrap" class="make-logo-wrap" style="display:none;">
+              <img id="makeLogo" src="" alt="" />
+            </div>
+            <div class="inp-wrap has-save" style="flex:1;" id="makeInputWrap">
+              <!-- Populated by JS based on device -->
+            </div>
+          </div>
+          <div id="customMakeWrap" style="display:none;margin-top:6px;">
+            <input type="text" id="customMake" placeholder="Enter make..." style="font-size:14px;" />
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="lbl"><i class="ti ti-car-suv"></i> Model</div>
+          <div class="inp-wrap has-save" id="modelInputWrap">
+            <!-- Populated by JS based on device -->
+          </div>
+          <div id="customModelWrap" style="display:none;margin-top:6px;">
+            <input type="text" id="customModel" placeholder="Enter model..." style="font-size:14px;" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Additional notes -->
+      <div class="field">
+        <div class="lbl"><i class="ti ti-notes"></i> Additional notes</div>
+        <div class="inp-wrap" style="align-items:flex-start;">
+          <textarea id="notes" placeholder="Any extra details..."></textarea>
+          <button class="field-clear" onclick="window.clearField('notes')" tabindex="-1" style="top:10px;transform:none;">&times;</button>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="actions">
+        <button class="btn btn-wa" onclick="window.dispatchWhatsApp()"><i class="ti ti-message-circle"></i> Dispatch via WhatsApp</button>
+        <button class="btn btn-int" onclick="window.dispatchInterstate()"><i class="ti ti-car"></i> Dispatch to Interstate</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="preview" id="preview">
+    <div class="preview-lbl">Message preview</div>
+    <div class="preview-txt" id="previewText"></div>
+  </div>
+</div>
+
+<!-- Locked inside modal -->
+<div class="modal-overlay" id="trappedModal">
+  <div class="modal">
+    <div class="modal-hdr">
+      <i class="ti ti-alert-triangle"></i>
+      <div class="modal-hdr-txt">Safety Check</div>
+    </div>
+
+    <!-- Step 1: Yes / No -->
+    <div class="modal-body" id="trappedStep1">
+      <div class="modal-question">Is a person or animal locked inside?</div>
+      <div class="modal-sub">If yes, call will be marked *URGENT*</div>
+      <div class="modal-btns">
+        <button class="modal-btn modal-btn-yes" onclick="window.trappedAnswer(true)">
+          Yes
+        </button>
+        <button class="modal-btn modal-btn-no" onclick="window.trappedAnswer(false)">
+          No — Continue
+        </button>
+      </div>
+    </div>
+
+    <!-- Step 2: Who is locked inside? -->
+    <div class="modal-body" id="trappedStep2" style="display:none;">
+      <div class="modal-question">Who is locked inside?</div>
+      <div class="modal-sub">This will be added in bold to the message</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:0.5rem;">
+        <button class="modal-btn modal-btn-yes" onclick="window.trappedWho('Person')" style="background:#8B2000;">
+          Person locked inside
+        </button>
+        <button class="modal-btn modal-btn-yes" onclick="window.trappedWho('Animal')" style="background:#5A5200;">
+          Animal locked inside
+        </button>
+        <button class="modal-btn modal-btn-no" onclick="window.trappedWho('Other')">
+          Other — specify in notes
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
+import { getDatabase, ref, get, set, onValue } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBLbU8jdXP7UEtkndbpcM1I3EeZcChtMpU",
+  authDomain: "bergen-county-dispatch-form.firebaseapp.com",
+  databaseURL: "https://bergen-county-dispatch-form-default-rtdb.firebaseio.com",
+  projectId: "bergen-county-dispatch-form",
+  storageBucket: "bergen-county-dispatch-form.firebasestorage.app",
+  messagingSenderId: "941729771971",
+  appId: "1:941729771971:web:3e173a9dbd279bc8140d76"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+// ── State ──
+window.isUrgent = false;
+window.chips = {};
+window.makesData = {};
+
+// ── Comprehensive built-in makes & models (no seed script needed) ──
+window.makesData = {
+  "Acura":["ILX","Integra","MDX","RDX","TLX","ZDX"],
+  "Alfa Romeo":["Giulia","Giulietta","Stelvio","Tonale"],
+  "Audi":["A3","A4","A5","A6","A7","A8","e-tron","Q3","Q5","Q7","Q8","RS3","RS5","RS7","S3","S4","S5","TT"],
+  "BMW":["2 Series","3 Series","4 Series","5 Series","7 Series","8 Series","i3","i4","iX","M3","M4","M5","X1","X2","X3","X4","X5","X6","X7","Z4"],
+  "Buick":["Enclave","Encore","Encore GX","Envision","LaCrosse"],
+  "Cadillac":["CT4","CT5","Escalade","Escalade ESV","Lyriq","XT4","XT5","XT6"],
+  "Chevrolet":["Blazer","Bolt EV","Colorado","Corvette","Equinox","Express","Malibu","Silverado 1500","Silverado 2500","Silverado 3500","Suburban","Tahoe","Traverse","Trax"],
+  "Chrysler":["300","Pacifica","Voyager"],
+  "Dodge":["Challenger","Charger","Durango","Hornet"],
+  "Ford":["Bronco","Bronco Sport","E-Transit","Edge","Escape","Explorer","Expedition","F-150","F-250","F-350","Maverick","Mustang","Mustang Mach-E","Ranger","Transit","Transit Connect"],
+  "Genesis":["G70","G80","G90","GV60","GV70","GV80"],
+  "GMC":["Acadia","Canyon","Envoy","Sierra 1500","Sierra 2500","Sierra 3500","Terrain","Yukon","Yukon XL"],
+  "Honda":["Accord","Civic","CR-V","HR-V","Odyssey","Passport","Pilot","Ridgeline"],
+  "Hyundai":["Elantra","Ioniq 5","Ioniq 6","Kona","Palisade","Santa Cruz","Santa Fe","Sonata","Tucson","Venue"],
+  "Infiniti":["Q50","Q60","QX50","QX55","QX60","QX80"],
+  "Jeep":["Cherokee","Commander","Compass","Gladiator","Grand Cherokee","Grand Cherokee L","Renegade","Wagoneer","Wrangler"],
+  "Kia":["Carnival","EV6","K5","Niro","Seltos","Sorento","Soul","Sportage","Stinger","Telluride"],
+  "Land Rover":["Defender","Discovery","Discovery Sport","Range Rover","Range Rover Evoque","Range Rover Sport","Range Rover Velar"],
+  "Lexus":["ES","GX","IS","LC","LS","LX","NX","RX","UX"],
+  "Lincoln":["Aviator","Corsair","Navigator","Nautilus"],
+  "Maserati":["Ghibli","GranTurismo","Grecale","Levante","Quattroporte"],
+  "Mazda":["CX-30","CX-5","CX-50","CX-9","CX-90","Mazda3","Mazda6","MX-5 Miata"],
+  "Mercedes-Benz":["A-Class","C-Class","CLA","CLS","E-Class","EQB","EQE","EQS","G-Class","GLA","GLB","GLC","GLE","GLS","S-Class","Sprinter"],
+  "MINI":["Clubman","Convertible","Countryman","Hardtop"],
+  "Mitsubishi":["Eclipse Cross","Outlander","Outlander Sport"],
+  "Nissan":["Altima","Armada","Frontier","Kicks","Leaf","Maxima","Murano","Pathfinder","Rogue","Rogue Sport","Sentra","Titan","Versa"],
+  "Porsche":["911","Cayenne","Macan","Panamera","Taycan"],
+  "Ram":["1500","2500","3500","ProMaster","ProMaster City"],
+  "Rivian":["R1S","R1T"],
+  "Rolls-Royce":["Cullinan","Ghost","Phantom","Spectre","Wraith"],
+  "Subaru":["Ascent","BRZ","Crosstrek","Forester","Impreza","Legacy","Outback","Solterra","WRX"],
+  "Tesla":["Cybertruck","Model 3","Model S","Model X","Model Y"],
+  "Toyota":["4Runner","bZ4X","Camry","Corolla","Corolla Cross","GR86","Highlander","Land Cruiser","Prius","RAV4","RAV4 Prime","Sequoia","Sienna","Tacoma","Tundra","Venza"],
+  "Volkswagen":["Atlas","Atlas Cross Sport","Golf","ID.4","Jetta","Passat","Taos","Tiguan"],
+  "Volvo":["C40","S60","S90","V60","V90","XC40","XC60","XC90"],
+  "Other":["Other"]
+};
+
+// ── Telzio live call polling ──
+// Replace with your Cloudflare Worker URL after deploying telzio-proxy.js
+const TELZIO_PROXY_URL = 'https://cobc.shmueleidelman-work.workers.dev/proxy';
+var telzioInterval = null;
+var lastLiveCallFrom = null;
+
+async function pollTelzioLiveCalls() {
+  try {
+    var resp = await fetch(TELZIO_PROXY_URL + '/calls/live');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    var data = await resp.json();
+    var calls = data.LiveCalls || [];
+
+    // Find first inbound call
+    var inbound = calls.filter(function(c) { return c.Direction === 'inbound'; });
+
+    var statusEl = document.getElementById('telzioStatus');
+    var banner = document.getElementById('liveCallBanner');
+    var numEl = document.getElementById('liveCallNum');
+
+    if (inbound.length > 0) {
+      var call = inbound[0];
+      var from = call.From || '';
+      // Format: +12015551234 → (201) 555-1234
+      var formatted = formatPhone(from);
+      lastLiveCallFrom = formatted;
+
+      statusEl.textContent = 'Live call';
+      statusEl.className = 'telzio-status live';
+
+      // Only show banner if phone field is empty or different
+      var currentPhone = document.getElementById('phone').value.trim();
+      if (currentPhone !== formatted) {
+        numEl.textContent = formatted;
+        banner.style.display = 'flex';
+      }
+    } else {
+      lastLiveCallFrom = null;
+      statusEl.textContent = '';
+      statusEl.className = 'telzio-status';
+      banner.style.display = 'none';
+    }
+  } catch(e) {
+    // Silently fail — don't disrupt dispatch
+    console.warn('Telzio poll error:', e.message);
+    var statusEl = document.getElementById('telzioStatus');
+    statusEl.textContent = '';
+    statusEl.className = 'telzio-status offline';
+  }
+}
+
+function formatPhone(e164) {
+  var digits = e164.replace(/\D/g, '');
+  if (digits.length === 11 && digits[0] === '1') digits = digits.slice(1);
+  if (digits.length === 10) {
+    return '(' + digits.slice(0,3) + ') ' + digits.slice(3,6) + '-' + digits.slice(6);
+  }
+  return e164;
+}
+
+window.pullLastCall = async function() {
+  showToast('Fetching last call...');
+  try {
+    var resp = await fetch(TELZIO_PROXY_URL + '/calls/log?MaxResults=3&Direction=inbound');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    var data = await resp.json();
+
+    // Telzio returns array directly or wrapped — handle both
+    var calls = Array.isArray(data) ? data : (data.Calls || data.calls || []);
+
+    if (calls.length === 0) {
+      showToast('No recent calls found');
+      return;
+    }
+
+    // Find first inbound with a From number
+    var call = null;
+    for (var i = 0; i < calls.length; i++) {
+      if (calls[i].From || calls[i].from) { call = calls[i]; break; }
+    }
+
+    if (!call) { showToast('No caller number found'); return; }
+
+    var from = call.From || call.from || '';
+    var formatted = formatPhone(from);
+    document.getElementById('phone').value = formatted;
+    showToast('\u2713 Last call: ' + formatted);
+  } catch(e) {
+    showToast('Error: ' + e.message);
+    console.warn('pullLastCall error:', e);
+  }
+};
+
+window.fillFromLiveCall = function() {
+  if (lastLiveCallFrom) {
+    document.getElementById('phone').value = lastLiveCallFrom;
+    document.getElementById('liveCallBanner').style.display = 'none';
+    showToast('\u2713 Phone filled from live call');
+  }
+};
+
+// Start polling every 5 seconds once page loads
+if (TELZIO_PROXY_URL.indexOf('YOUR-WORKER') === -1) {
+  pollTelzioLiveCalls();
+  telzioInterval = setInterval(pollTelzioLiveCalls, 1000);
+}
+
+// ── Load all data on startup ──
+async function loadAll() {
+  try {
+    // 1. Last call number from Firebase
+    const callSnap = await get(ref(db, 'meta/lastCallNumber'));
+    const lastNum = callSnap.exists() ? callSnap.val() : 1000;
+    document.getElementById('callNum').value = lastNum + 1;
+    document.getElementById('callNum').dataset.auto = lastNum + 1;
+
+    // 2. Colors from Firebase (with defaults)
+    const colorsSnap = await get(ref(db, 'colors'));
+    var colorList = [];
+    if (colorsSnap.exists()) {
+      colorList = colorsSnap.val();
+      if (!Array.isArray(colorList)) colorList = Object.values(colorList);
+    } else {
+      colorList = ['Beige','Black','Blue','Brown','Gold','Gray','Green','Maroon','Navy','Orange','Pink','Purple','Red','Silver','Tan','White','Yellow'];
+      await set(ref(db, 'colors'), colorList);
+    }
+    populateColors(colorList);
+
+    // 3. Merge any custom makes saved by dispatchers into the built-in list
+    const makesSnap = await get(ref(db, 'makes'));
+    if (makesSnap.exists()) {
+      const saved = makesSnap.val();
+      Object.keys(saved).forEach(function(m) {
+        if (!window.makesData[m]) window.makesData[m] = saved[m];
+        else {
+          // Merge custom models into existing make
+          var existing = window.makesData[m];
+          var custom = Array.isArray(saved[m]) ? saved[m] : [];
+          custom.forEach(function(model) {
+            if (existing.indexOf(model) === -1) existing.push(model);
+          });
+          window.makesData[m] = existing.sort();
+        }
+      });
+    }
+    populateMakes(window.makesData);
+
+    // 4. Custom natures from Firebase
+    const naturesSnap = await get(ref(db, 'customNatures'));
+    if (naturesSnap.exists()) {
+      const customNatures = naturesSnap.val();
+      const sel = document.getElementById('natureType');
+      const customGroup = document.createElement('optgroup');
+      customGroup.label = 'Custom';
+      const arr = Array.isArray(customNatures) ? customNatures : Object.values(customNatures);
+      arr.forEach(function(n) {
+        var opt = document.createElement('option');
+        opt.value = 'custom_' + n.toLowerCase().replace(/\s+/g,'_');
+        opt.textContent = n;
+        customGroup.appendChild(opt);
+      });
+      if (customGroup.children.length > 0) {
+        const otherGroup = sel.querySelector('optgroup[label="Other"]');
+        sel.insertBefore(customGroup, otherGroup);
+      }
+    }
+
+    document.getElementById('dbLoading').classList.add('hidden');
+  } catch(e) {
+    console.error('Firebase load error:', e);
+    document.getElementById('dbLoading').innerHTML = '<i class="ti ti-wifi-off" style="color:#E05000;font-size:16px;"></i><span style="color:#C87040;">Could not connect — some features limited</span>';
+    populateMakes(window.makesData);
+    populateColors(['Beige','Black','Blue','Brown','Gold','Gray','Green','Maroon','Navy','Orange','Pink','Purple','Red','Silver','Tan','White','Yellow']);
+    setTimeout(function(){ document.getElementById('dbLoading').classList.add('hidden'); }, 3000);
+    document.getElementById('callNum').value = '';
+    document.getElementById('callNum').placeholder = 'Enter manually';
+    setTimeout(function(){ document.getElementById('dbLoading').classList.add('hidden'); }, 3000);
+  }
+}
+
+// ── Generate Google Maps link from location field ──
+function updateMapsLink() {
+  // Element was removed — function kept as no-op for compatibility
+}
+
+window.updateMapsLink = updateMapsLink;
+window.pasteMapsUrl = async function() {
+  var url = '';
+  try {
+    url = await navigator.clipboard.readText();
+  } catch(e) {
+    url = prompt('Paste your Google Maps link here:');
+    if (!url) return;
+  }
+  url = url.trim();
+  if (!url) return;
+
+  var coords = null;
+  var m = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (m) coords = { lat: m[1], lng: m[2] };
+  if (!coords) { m = url.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/); if (m) coords = { lat: m[1], lng: m[2] }; }
+  if (!coords) { m = url.match(/[?&]ll=(-?\d+\.\d+),(-?\d+\.\d+)/); if (m) coords = { lat: m[1], lng: m[2] }; }
+
+  if (coords) {
+    var loc = coords.lat + ', ' + coords.lng;
+    document.getElementById('location').value = loc;
+    updateMapsLink();
+    showToast('\u2713 Coordinates set: ' + loc);
+  } else if (url.includes('goo.gl') || url.includes('maps.app') || url.includes('maps.google')) {
+    document.getElementById('location').value = url;
+    updateMapsLink();
+    showToast('Link pasted as location');
+  } else {
+    showToast('Could not extract coordinates from that link');
+  }
+};
+
+// ── Clear individual field ──
+window.clearField = function(id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.value = '';
+  el.focus();
+};
+
+// ── Toast ──
+function showToast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(function(){ t.classList.remove('show'); }, 2500);
+}
+
+// ── Populate color datalist ──
+window.toggleColorDropdown = function() {
+  var btn = document.getElementById('colorDropdownBtn');
+  var menu = document.getElementById('colorDropdownMenu');
+  if (!btn || !menu) return;
+  var isOpen = menu.classList.contains('open');
+  if (isOpen) {
+    menu.classList.remove('open');
+    btn.classList.remove('open');
+  } else {
+    menu.classList.add('open');
+    btn.classList.add('open');
+    // Close on outside click
+    setTimeout(function() {
+      document.addEventListener('click', function handler(e) {
+        if (!document.getElementById('colorDropdown').contains(e.target)) {
+          menu.classList.remove('open');
+          btn.classList.remove('open');
+          document.removeEventListener('click', handler);
+        }
+      });
+    }, 0);
+  }
+};
+
+window.selectDesktopColor = function(color) {
+  document.getElementById('vColor').value = color;
+  var label = document.getElementById('colorDropdownLabel');
+  var dot   = document.getElementById('colorDot');
+  var btn   = document.getElementById('colorDropdownBtn');
+  var menu  = document.getElementById('colorDropdownMenu');
+  if (label) label.textContent = color || '— Select color —';
+  if (dot) {
+    var c = COLOR_MAP[color];
+    if (c) {
+      dot.style.background = c;
+      dot.style.borderColor = (color==='White'||color==='Beige'||color==='Silver') ? '#CCC' : 'rgba(0,0,0,0.12)';
+      dot.style.display = 'inline-block';
+    } else { dot.style.display = 'none'; }
+  }
+  // Update selected state in menu
+  if (menu) menu.querySelectorAll('.color-option').forEach(function(o){
+    o.classList.toggle('selected', o.dataset.value === color);
+  });
+  if (btn) btn.classList.remove('open');
+  if (menu) menu.classList.remove('open');
+  // Show custom field if Other
+  var customWrap = document.getElementById('customColorWrap');
+  if (customWrap) customWrap.style.display = (color === 'Other') ? 'block' : 'none';
+};
+
+function buildDesktopColorMenu(colors) {
+  var menu = document.getElementById('colorDropdownMenu');
+  if (!menu) return;
+  menu.innerHTML = '';
+  colors.forEach(function(color) {
+    var opt = document.createElement('div');
+    opt.className = 'color-option';
+    opt.dataset.value = color;
+    var c = COLOR_MAP[color] || '#999';
+    var border = (color==='White'||color==='Beige'||color==='Silver') ? '#CCC' : 'rgba(0,0,0,0.12)';
+    opt.innerHTML =
+      '<span class="color-dot" style="background:' + c + ';border-color:' + border + ';' + (!COLOR_MAP[color] ? 'display:none;' : '') + '"></span>' +
+      color;
+    opt.addEventListener('click', function() { window.selectDesktopColor(color); });
+    menu.appendChild(opt);
+  });
+}
+
+function populateColors(colors) {
+  var allColors = colors.filter(function(c){ return c !== 'Other'; }).concat(['Other']);
+  window._colorOptions = allColors;
+
+  var overlay = document.getElementById('colorPickerOverlay');
+  if (overlay) overlay.remove();
+
+  if (isMobile) {
+    // Mobile: rebuild overlay from _colorOptions on next open
+  } else {
+    // Desktop: populate custom dropdown menu
+    buildDesktopColorMenu(allColors);
+    // Also keep hidden input in sync
+    var sel = document.getElementById('vColor');
+    // hidden input — no options needed
+  }
+}
+
+window.onColorChange = function() {
+  var color = document.getElementById('vColor') ? document.getElementById('vColor').value : '';
+  var customWrap = document.getElementById('customColorWrap');
+  if (customWrap) customWrap.style.display = (color === 'Other') ? 'block' : 'none';
+};
+
+window.onModelInputChange = function() {
+  var model = document.getElementById('vModel') ? document.getElementById('vModel').value.trim() : '';
+  var customWrap = document.getElementById('customModelWrap');
+  if (customWrap) customWrap.style.display = (model === 'Other') ? 'block' : 'none';
+};
+
+// ── Color → CSS color map for swatches ──
+var COLOR_MAP = {
+  'Beige':'#F5F0DC','Black':'#1A1A1A','Blue':'#2563EB','Brown':'#7B4A2D',
+  'Gold':'#C8A532','Gray':'#808080','Green':'#2E7D32','Maroon':'#800000',
+  'Navy':'#1B2A6B','Orange':'#E65100','Pink':'#E91E8C','Purple':'#6A1B9A',
+  'Red':'#C62828','Silver':'#C0C0C0','Tan':'#D2B48C','White':'#F5F5F5',
+  'Yellow':'#FDD835'
+};
+
+function getSwatchHtml(color) {
+  var c = COLOR_MAP[color];
+  if (!c) return '';
+  var border = (color === 'White' || color === 'Beige' || color === 'Silver') ? '#CCC' : c;
+  return '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + c + ';border:1px solid ' + border + ';margin-right:6px;vertical-align:middle;"></span>';
+}
+
+// On mobile, <select> doesn't support HTML in options.
+// We use a custom dropdown overlay instead for color.
+function buildColorSelect(colors, wrap) {
+  // Use a button that opens a custom color picker overlay
+  var current = '';
+  wrap.innerHTML =
+    '<button type="button" id="colorPickerBtn" onclick="window.openColorPicker()" style="width:100%;padding:11px 40px 11px 14px;border:1.5px solid #E0CC80;border-radius:10px;font-size:14px;background:#FFFEF5;color:#1A1400;font-family:inherit;text-align:left;cursor:pointer;display:flex;align-items:center;gap:8px;-webkit-appearance:none;">' +
+      '<span id="colorPickerSwatch" style="width:14px;height:14px;border-radius:50%;border:1px solid #CCC;flex-shrink:0;display:none;"></span>' +
+      '<span id="colorPickerLabel" style="flex:1;">— Select color —</span>' +
+      '<i class="ti ti-chevron-down" style="color:#C8A532;font-size:14px;position:absolute;right:12px;"></i>' +
+    '</button>' +
+    '<input type="hidden" id="vColor" />' +
+    '<button class="save-custom-btn" onclick="window.saveCustomColor()" title="Save color" style="position:absolute;right:36px;top:50%;transform:translateY(-50%);"><i class="ti ti-plus"></i></button>';
+  wrap.style.position = 'relative';
+}
+
+window._colorOptions = [];
+
+window.openColorPicker = function() {
+  var overlay = document.getElementById('colorPickerOverlay');
+  if (overlay) { overlay.style.display = 'flex'; return; }
+
+  // Build overlay
+  overlay = document.createElement('div');
+  overlay.id = 'colorPickerOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:2000;display:flex;align-items:flex-end;justify-content:center;';
+  var sheet = document.createElement('div');
+  sheet.style.cssText = 'background:#FDFBF0;width:100%;max-width:480px;border-radius:18px 18px 0 0;padding:1.25rem;max-height:70vh;overflow-y:auto;';
+  var title = document.createElement('div');
+  title.style.cssText = 'font-size:15px;font-weight:600;color:#1A1400;margin-bottom:1rem;';
+  title.textContent = 'Select Color';
+  sheet.appendChild(title);
+
+  window._colorOptions.forEach(function(color) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.style.cssText = 'display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:none;background:transparent;font-size:15px;color:#1A1400;font-family:inherit;cursor:pointer;border-radius:8px;text-align:left;';
+    var cssColor = COLOR_MAP[color] || '#999';
+    var border = (color==='White'||color==='Beige'||color==='Silver') ? '#CCC' : cssColor;
+    btn.innerHTML = '<span style="width:18px;height:18px;border-radius:50%;background:' + cssColor + ';border:1.5px solid ' + border + ';flex-shrink:0;"></span>' + color;
+    btn.addEventListener('click', function() {
+      window.setColor(color);
+      overlay.style.display = 'none';
+    });
+    btn.addEventListener('mouseenter', function(){ btn.style.background = '#F5ECC0'; });
+    btn.addEventListener('mouseleave', function(){ btn.style.background = 'transparent'; });
+    sheet.appendChild(btn);
+  });
+
+  overlay.appendChild(sheet);
+  overlay.addEventListener('click', function(e){ if(e.target===overlay) overlay.style.display='none'; });
+  document.body.appendChild(overlay);
+};
+
+window.setColor = function(color) {
+  document.getElementById('vColor').value = color;
+  var label = document.getElementById('colorPickerLabel');
+  var swatch = document.getElementById('colorPickerSwatch');
+  if (label) label.textContent = color || '— Select color —';
+  if (swatch) {
+    var c = COLOR_MAP[color];
+    if (c) {
+      var border = (color==='White'||color==='Beige'||color==='Silver') ? '#CCC' : c;
+      swatch.style.background = c;
+      swatch.style.borderColor = border;
+      swatch.style.display = 'inline-block';
+    } else { swatch.style.display = 'none'; }
+  }
+  // Handle Other
+  var customWrap = document.getElementById('customColorWrap');
+  if (customWrap) customWrap.style.display = (color === 'Other') ? 'block' : 'none';
+};
+
+// ── Handle Other for make/model selects ──
+window.onMakeChange = function() {
+  var make = document.getElementById('vMake').value;
+  var customWrap = document.getElementById('customMakeWrap');
+  if (customWrap) customWrap.style.display = (make === 'Other') ? 'block' : 'none';
+  if (make === 'Other') { updateMakeLogo(''); return; }
+  updateMakeLogo(make);
+  var modelEl = document.getElementById('vModel');
+  if (modelEl && modelEl.tagName === 'SELECT') { modelEl.innerHTML = '<option value="">— Select model —</option>'; modelEl.disabled = true; }
+  var customModelWrap = document.getElementById('customModelWrap');
+  if (customModelWrap) customModelWrap.style.display = 'none';
+  if (!make || !window.makesData[make]) return;
+  var models = window.makesData[make];
+  if (models.models) models = models.models;
+  if (!Array.isArray(models)) return;
+  populateModels(models);
+  if (modelEl && modelEl.tagName === 'SELECT') modelEl.disabled = false;
+};
+
+window.onModelChange = function() {
+  var model = document.getElementById('vModel') ? document.getElementById('vModel').value : '';
+  var customWrap = document.getElementById('customModelWrap');
+  if (customWrap) customWrap.style.display = (model === 'Other') ? 'block' : 'none';
+};
+
+// ── Detect mobile (touch device) ──
+var isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+
+// ── Build make/model UI based on device ──
+function buildMakeModelUI() {
+  var makeWrap  = document.getElementById('makeInputWrap');
+  var modelWrap = document.getElementById('modelInputWrap');
+  var colorWrap = document.getElementById('colorInputWrap');
+  if (!makeWrap || !modelWrap) return;
+
+  if (isMobile) {
+    if (colorWrap) buildColorSelect([], colorWrap);
+
+    makeWrap.innerHTML =
+      '<select id="vMake" onchange="window.onMakeChange()" style="padding-right:76px;">' +
+        '<option value="">— Select make —</option>' +
+        '<option value="Other">Other</option>' +
+      '</select>' +
+      '<button class="field-clear" onclick="window.clearMake()" tabindex="-1">&times;</button>' +
+      '<button class="save-custom-btn" onclick="window.saveCustomMake()" title="Save make"><i class="ti ti-plus"></i></button>';
+
+    modelWrap.innerHTML =
+      '<select id="vModel" disabled onchange="window.onModelChange()" style="padding-right:76px;">' +
+        '<option value="">— Select model —</option>' +
+        '<option value="Other">Other</option>' +
+      '</select>' +
+      '<button class="field-clear" onclick="window.clearField(\'vModel\')" tabindex="-1">&times;</button>' +
+      '<button class="save-custom-btn" onclick="window.saveCustomModel()" title="Save model"><i class="ti ti-plus"></i></button>';
+  } else {
+    // Desktop: custom color dropdown with swatches, make/model as datalist
+    if (colorWrap) {
+      colorWrap.innerHTML =
+        '<div class="color-dropdown" id="colorDropdown">' +
+          '<input type="hidden" id="vColor" />' +
+          '<button type="button" class="color-dropdown-btn" id="colorDropdownBtn" onclick="window.toggleColorDropdown()">' +
+            '<span class="color-dot" id="colorDot" style="display:none;"></span>' +
+            '<span id="colorDropdownLabel">— Select color —</span>' +
+            '<i class="ti ti-chevron-down chevron"></i>' +
+          '</button>' +
+          '<div class="color-dropdown-menu" id="colorDropdownMenu"></div>' +
+        '</div>' +
+        '<button class="save-custom-btn" onclick="window.saveCustomColor()" title="Save color" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);"><i class="ti ti-plus"></i></button>';
+      colorWrap.style.position = 'relative';
+    }
+
+    makeWrap.innerHTML =
+      '<input type="text" id="vMake" placeholder="Type or select make..." list="makeList" autocomplete="off" oninput="window.onMakeInput()" onfocus="window.onMakeInput()" />' +
+      '<datalist id="makeList"></datalist>' +
+      '<button class="field-clear" onclick="window.clearMake()" tabindex="-1">&times;</button>' +
+      '<button class="save-custom-btn" onclick="window.saveCustomMake()" title="Save make"><i class="ti ti-plus"></i></button>';
+
+    modelWrap.innerHTML =
+      '<input type="text" id="vModel" placeholder="Type or select model..." list="modelList" autocomplete="off" oninput="window.onModelInputChange()" />' +
+      '<datalist id="modelList"></datalist>' +
+      '<button class="field-clear" onclick="window.clearField(\'vModel\')" tabindex="-1">&times;</button>' +
+      '<button class="save-custom-btn" onclick="window.saveCustomModel()" title="Save model"><i class="ti ti-plus"></i></button>';
+  }
+}
+buildMakeModelUI();
+
+// ── Populate make ──
+var MAKE_LOGOS = {
+  "Acura":         "https://img.logo.dev/acura.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Alfa Romeo":    "https://img.logo.dev/alfaromeo.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Audi":          "https://img.logo.dev/audi.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "BMW":           "https://img.logo.dev/bmw.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Buick":         "https://img.logo.dev/buick.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Cadillac":      "https://img.logo.dev/cadillac.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Chevrolet":     "https://img.logo.dev/chevrolet.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Chrysler":      "https://img.logo.dev/chrysler.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Dodge":         "https://img.logo.dev/dodge.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Ford":          "https://img.logo.dev/ford.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Genesis":       "https://img.logo.dev/genesis.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "GMC":           "https://img.logo.dev/gmc.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Honda":         "https://img.logo.dev/honda.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Hyundai":       "https://img.logo.dev/hyundai.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Infiniti":      "https://img.logo.dev/infinitiusa.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Jeep":          "https://img.logo.dev/jeep.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Kia":           "https://img.logo.dev/kia.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Land Rover":    "https://img.logo.dev/landrover.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Lexus":         "https://img.logo.dev/lexus.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Lincoln":       "https://img.logo.dev/lincoln.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Maserati":      "https://img.logo.dev/maserati.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Mazda":         "https://img.logo.dev/mazda.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Mercedes-Benz": "https://img.logo.dev/mercedes-benz.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "MINI":          "https://img.logo.dev/mini.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Mitsubishi":    "https://img.logo.dev/mitsubishicars.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Nissan":        "https://img.logo.dev/nissanusa.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Porsche":       "https://img.logo.dev/porsche.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Ram":           "https://img.logo.dev/ramtrucks.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Rivian":        "https://img.logo.dev/rivian.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Rolls-Royce":   "https://img.logo.dev/rolls-roycemotorcars.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Subaru":        "https://img.logo.dev/subaru.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Tesla":         "https://img.logo.dev/tesla.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Toyota":        "https://img.logo.dev/toyota.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Volkswagen":    "https://img.logo.dev/vw.com?token=pk_NlWPjTaRRoKMrASNrCesBg",
+  "Volvo":         "https://img.logo.dev/volvocars.com?token=pk_NlWPjTaRRoKMrASNrCesBg"
+};
+
+function updateMakeLogo(make) {
+  var wrap = document.getElementById('makeLogoWrap');
+  var img  = document.getElementById('makeLogo');
+  var url  = MAKE_LOGOS[make];
+  if (url) {
+    img.src = url;
+    img.alt = make + ' logo';
+    wrap.style.display = 'flex';
+    img.onerror = function(){ wrap.style.display = 'none'; };
+  } else {
+    wrap.style.display = 'none';
+  }
+}
+
+// ── Populate make — handles both select (mobile) and datalist (desktop) ──
+function populateMakes(makesObj) {
+  var makes = Object.keys(makesObj).sort();
+  if (isMobile) {
+    var sel = document.getElementById('vMake');
+    if (!sel || sel.tagName !== 'SELECT') return;
+    var current = sel.value;
+    sel.innerHTML = '<option value="">— Select make —</option>';
+    makes.filter(function(m){ return m !== 'Other'; }).forEach(function(m) {
+      var opt = document.createElement('option'); opt.value = m; opt.textContent = m; sel.appendChild(opt);
+    });
+    var otherOpt = document.createElement('option'); otherOpt.value = 'Other'; otherOpt.textContent = 'Other'; sel.appendChild(otherOpt);
+    if (current) sel.value = current;
+  } else {
+    var dl = document.getElementById('makeList');
+    if (!dl) return;
+    dl.innerHTML = '';
+    makes.forEach(function(m) {
+      var opt = document.createElement('option'); opt.value = m; dl.appendChild(opt);
+    });
+  }
+}
+
+function populateModels(models) {
+  if (isMobile) {
+    var sel = document.getElementById('vModel');
+    if (!sel || sel.tagName !== 'SELECT') return;
+    sel.innerHTML = '<option value="">— Select model —</option>';
+    sel.disabled = !models || models.length === 0;
+    if (models) {
+      models.filter(function(m){ return m !== 'Other'; }).forEach(function(m) {
+        var opt = document.createElement('option'); opt.value = m; opt.textContent = m; sel.appendChild(opt);
+      });
+      var otherOpt = document.createElement('option'); otherOpt.value = 'Other'; otherOpt.textContent = 'Other'; sel.appendChild(otherOpt);
+    }
+  } else {
+    var dl = document.getElementById('modelList');
+    if (!dl) return;
+    dl.innerHTML = '';
+    if (models) models.forEach(function(m) {
+      var opt = document.createElement('option'); opt.value = m; dl.appendChild(opt);
+    });
+  }
+}
+
+// ── On make change (mobile select) ──
+window.onMakeChange = function() {
+  var make = document.getElementById('vMake').value;
+  updateMakeLogo(make);
+  var modelEl = document.getElementById('vModel');
+  if (modelEl && modelEl.tagName === 'SELECT') { modelEl.innerHTML = '<option value="">— Select model —</option>'; modelEl.disabled = true; }
+  if (!make || !window.makesData[make]) return;
+  var models = window.makesData[make];
+  if (models.models) models = models.models;
+  if (!Array.isArray(models)) return;
+  populateModels(models);
+  if (modelEl && modelEl.tagName === 'SELECT') modelEl.disabled = false;
+};
+
+// ── On make input (desktop datalist) ──
+window.onMakeInput = function() {
+  var make = document.getElementById('vMake').value.trim();
+  updateMakeLogo(make);
+  // Repopulate make datalist (so backspace still shows all)
+  var makeDl = document.getElementById('makeList');
+  if (makeDl) {
+    makeDl.innerHTML = '';
+    Object.keys(window.makesData).sort().forEach(function(m) {
+      var opt = document.createElement('option'); opt.value = m; makeDl.appendChild(opt);
+    });
+  }
+  var modelEl = document.getElementById('vModel');
+  if (modelEl) modelEl.value = '';
+  if (!make || !window.makesData[make]) { populateModels([]); return; }
+  var models = window.makesData[make];
+  if (models.models) models = models.models;
+  if (!Array.isArray(models)) return;
+  populateModels(models);
+};
+
+// ── Clear make + model ──
+window.clearMake = function() {
+  var makeEl = document.getElementById('vMake');
+  var modelEl = document.getElementById('vModel');
+  if (makeEl) makeEl.value = '';
+  if (modelEl) {
+    if (modelEl.tagName === 'SELECT') { modelEl.innerHTML = '<option value="">— Select model —</option>'; modelEl.disabled = true; }
+    else { modelEl.value = ''; }
+  }
+  var dl = document.getElementById('modelList'); if (dl) dl.innerHTML = '';
+  updateMakeLogo('');
+};
+
+// ── Save custom color ──
+window.saveCustomColor = async function() {
+  var color = isMobile ? prompt('Enter color to save:') : document.getElementById('vColor').value.trim();
+  if (!color || !color.trim()) { showToast('Enter a color first'); return; }
+  color = color.trim();
+  try {
+    const snap = await get(ref(db, 'colors'));
+    var colors = snap.exists() ? snap.val() : [];
+    if (!Array.isArray(colors)) colors = Object.values(colors);
+    if (colors.map(function(c){ return c.toLowerCase(); }).indexOf(color.toLowerCase()) !== -1) {
+      showToast(color + ' already saved'); return;
+    }
+    colors.push(color);
+    colors.sort();
+    await set(ref(db, 'colors'), colors);
+    populateColors(colors);
+    showToast('\u2713 Saved "' + color + '"');
+  } catch(e) { showToast('Could not save — check connection'); }
+};
+
+// ── Save custom make ──
+window.saveCustomMake = async function() {
+  var make = document.getElementById('vMake').value.trim();
+  if (!make) { showToast('Type a make name first'); return; }
+  try {
+    const snap = await get(ref(db, 'makes'));
+    var makes = snap.exists() ? snap.val() : {};
+    if (makes[make]) { showToast(make + ' already saved'); return; }
+    makes[make] = [];
+    await set(ref(db, 'makes'), makes);
+    window.makesData[make] = [];
+    populateMakes(window.makesData);
+    showToast('\u2713 Saved make "' + make + '"');
+  } catch(e) { showToast('Could not save — check connection'); }
+};
+
+// ── Save custom model ──
+window.saveCustomModel = async function() {
+  var makeEl = document.getElementById('vMake');
+  var make = makeEl ? makeEl.value.trim() : '';
+  if (!make) { showToast('Select a make first'); return; }
+  var model = isMobile ? prompt('Enter model name to save under ' + make + ':') : document.getElementById('vModel').value.trim();
+  if (!model || !model.trim()) { showToast('Enter a model name'); return; }
+  model = model.trim();
+  try {
+    const snap = await get(ref(db, 'makes/' + make));
+    var models = snap.exists() ? snap.val() : [];
+    if (models.models) models = models.models;
+    if (!Array.isArray(models)) models = [];
+    if (models.map(function(m){ return m.toLowerCase(); }).indexOf(model.toLowerCase()) !== -1) {
+      showToast(model + ' already saved'); return;
+    }
+    models.push(model); models.sort();
+    await set(ref(db, 'makes/' + make), models);
+    window.makesData[make] = models;
+    populateModels(models);
+    if (!isMobile) window.onMakeInput();
+    showToast('\u2713 Saved model "' + model + '"');
+  } catch(e) { showToast('Could not save — check connection'); }
+};
+
+// ── Other: vehicle related toggle ──
+window.isOtherVehicle = false;
+window.toggleOtherVehicle = function() {
+  window.isOtherVehicle = !window.isOtherVehicle;
+  document.getElementById('otherVehicleBar').classList.toggle('active', window.isOtherVehicle);
+  document.getElementById('vehicleFields').classList.toggle('on', window.isOtherVehicle);
+  if (!window.isOtherVehicle) {
+    window.clearMake();
+    var colorEl = document.getElementById('vColor'); if (colorEl) colorEl.value = '';
+    var yearEl = document.getElementById('vYear'); if (yearEl) yearEl.value = '';
+  }
+};
+
+// ── Urgent ──
+window.toggleUrgent = function() {
+  window.isUrgent = !window.isUrgent;
+  document.getElementById('urgentBar').classList.toggle('active', window.isUrgent);
+};
+
+// ── Nature change ──
+var VEHICLE_NATURES = ['flat_tire','boost','out_of_gas','lockout','vehicle_stalled','vehicle_pullout','plastic_hanging','bumper_hanging'];
+var QTY_NATURES = { heater: 'Heater units', ac: 'AC units' };
+
+window.onNatureChange = function() {
+  var val = document.getElementById('natureType').value;
+  var isVeh = VEHICLE_NATURES.indexOf(val) !== -1;
+
+  document.getElementById('vehicleFields').classList.toggle('on', isVeh);
+
+  // Flat tire chips
+  var showTire = val === 'flat_tire';
+  document.getElementById('tireOpts').style.display = showTire ? 'flex' : '';
+  document.getElementById('tireOpts').classList.toggle('on', showTire);
+
+  // Lockout type chips
+  var showLock = val === 'lockout';
+  document.getElementById('lockoutType').style.display = showLock ? 'flex' : '';
+  document.getElementById('lockoutType').classList.toggle('on', showLock);
+
+  // Hide house side chips when nature changes
+  document.getElementById('houseLockSide').style.display = '';
+  document.getElementById('houseLockSide').classList.remove('on');
+
+  // Show trapped modal when lockout selected
+  if (val === 'lockout') {
+    document.getElementById('trappedModal').classList.add('on');
+  }
+
+  // For lockout, hide vehicle fields until user picks vehicle vs house chip
+  if (val === 'lockout') {
+    document.getElementById('vehicleFields').classList.remove('on');
+  }
+
+  // Flood equipment
+  var showFlood = val === 'flood';
+  document.getElementById('floodEquip').classList.toggle('on', showFlood);
+  if (!showFlood) document.getElementById('floodEquipment').value = '';
+
+  // Qty field
+  var showQty = QTY_NATURES.hasOwnProperty(val);
+  document.getElementById('qtyField').classList.toggle('on', showQty);
+  if (showQty) document.getElementById('qtyLabel').textContent = QTY_NATURES[val];
+  else document.getElementById('acQuantity').value = '';
+
+  // Custom nature text + vehicle toggle
+  var showCustom = val === 'other';
+  document.getElementById('customNatureWrap').classList.toggle('on', showCustom);
+  if (!showCustom) {
+    document.getElementById('customNature').value = '';
+    window.isOtherVehicle = false;
+    document.getElementById('otherVehicleBar').classList.remove('active');
+  }
+
+  window.chips = {};
+  document.querySelectorAll('.chip').forEach(function(c){ c.classList.remove('selected'); });
+};
+
+// ── Trapped inside modal answer ──
+// ── Locked inside modal ──
+window.lockedInsideNote = '';
+
+window.trappedAnswer = function(isLocked) {
+  if (!isLocked) {
+    document.getElementById('trappedModal').classList.remove('on');
+    window.lockedInsideNote = '';
+    return;
+  }
+  // Show step 2
+  document.getElementById('trappedStep1').style.display = 'none';
+  document.getElementById('trappedStep2').style.display = 'block';
+};
+
+window.trappedWho = function(who) {
+  document.getElementById('trappedModal').classList.remove('on');
+  // Reset steps for next time
+  document.getElementById('trappedStep1').style.display = 'block';
+  document.getElementById('trappedStep2').style.display = 'none';
+  // Activate urgent
+  window.isUrgent = true;
+  document.getElementById('urgentBar').classList.add('active');
+  // Store who is locked inside for message
+  window.lockedInsideNote = who + ' locked inside';
+  showToast('*URGENT* — ' + window.lockedInsideNote);
+};
+
+// ── Chip select ──
+window.selectChip = function(evt, group, id, label) {
+  window.chips[group] = { id: id, label: label };
+  var parent = evt.target.parentElement;
+  parent.querySelectorAll('.chip').forEach(function(c){ c.classList.remove('selected'); });
+  evt.target.classList.add('selected');
+
+  // Lockout type: show/hide vehicle fields and house side chips
+  if (group === 'lockout_type') {
+    var isVehicle = (id === 'vehicle_lockout');
+    var isHouse   = (id === 'house_lockout');
+
+    // Vehicle fields
+    document.getElementById('vehicleFields').classList.toggle('on', isVehicle);
+    if (!isVehicle) {
+      ['vColor','vYear','vMake','vModel'].forEach(function(fid){ document.getElementById(fid).value = ''; });
+      updateMakeLogo('');
+    }
+
+    // House interior/exterior chips
+    var sideEl = document.getElementById('houseLockSide');
+    if (isHouse) {
+      sideEl.style.display = 'flex';
+      sideEl.classList.add('on');
+      // Clear any previous side chip selection
+      delete window.chips['house_side'];
+      sideEl.querySelectorAll('.chip').forEach(function(c){ c.classList.remove('selected'); });
+    } else {
+      sideEl.style.display = '';
+      sideEl.classList.remove('on');
+      delete window.chips['house_side'];
+    }
+  }
+};
+
+// ── Build nature string ──
+function getNatureLabel() {
+  var sel = document.getElementById('natureType');
+  var opt = sel.options[sel.selectedIndex];
+  if (!opt || !opt.value) return '';
+  if (opt.value === 'other') return document.getElementById('customNature').value.trim() || 'Other';
+  return opt.text;
+}
+
+function buildNatureString() {
+  var val = document.getElementById('natureType').value;
+  var label = getNatureLabel();
+  var parts = [label];
+
+  if (val === 'flat_tire' && window.chips['spare']) parts.push(window.chips['spare'].label);
+  if (val === 'lockout') {
+    var ltype = window.chips['lockout_type'];
+    if (ltype) {
+      // Replace the generic "Lockout" label with specific label
+      parts[0] = ltype.id === 'vehicle_lockout' ? 'Car Lockout' : 'House Lockout';
+    }
+    if (window.chips['house_side']) parts.push(window.chips['house_side'].label);
+  }
+  if (val === 'flood') {
+    var equip = document.getElementById('floodEquipment').value.trim();
+    if (equip) parts.push('Equipment: ' + equip);
+  }
+  if (QTY_NATURES.hasOwnProperty(val)) {
+    var qty = document.getElementById('acQuantity').value;
+    if (qty) parts.push('x' + qty);
+  }
+  if (VEHICLE_NATURES.indexOf(val) !== -1 || (val === 'other' && window.isOtherVehicle)) {
+    var yr   = document.getElementById('vYear') ? document.getElementById('vYear').value.trim() : '';
+    var colEl = document.getElementById('vColor');
+    var col  = colEl ? colEl.value.trim() : '';
+    if (col === 'Other') col = (document.getElementById('customColor') ? document.getElementById('customColor').value.trim() : '') || 'Other';
+    var makeEl = document.getElementById('vMake');
+    var make = makeEl ? makeEl.value.trim() : '';
+    if (make === 'Other') make = (document.getElementById('customMake') ? document.getElementById('customMake').value.trim() : '') || 'Other';
+    var modelEl = document.getElementById('vModel');
+    var model = modelEl ? modelEl.value.trim() : '';
+    if (model === 'Other') model = (document.getElementById('customModel') ? document.getElementById('customModel').value.trim() : '') || 'Other';
+    var veh = [yr, col, make, model].filter(Boolean).join(' ');
+    if (veh) parts.push(veh);
+  }
+  var notes = document.getElementById('notes').value.trim();
+  if (notes) parts.push(notes);
+  return parts.filter(Boolean).join(' | ');
+}
+
+function getFormData() {
+  var locationInput = document.getElementById('location');
+  return {
+    callNum: document.getElementById('callNum').value.trim(),
+    phone: document.getElementById('phone').value.trim(),
+    location: locationInput.value.trim(),
+    name: document.getElementById('callerName').value.trim(),
+    nature: buildNatureString(),
+    urgent: window.isUrgent,
+    lat: locationInput.dataset.lat || null,
+    lng: locationInput.dataset.lng || null
+  };
+}
+
+// ── Save call number to Firebase after dispatch ──
+async function saveCallNumber(num) {
+  try {
+    await set(ref(db, 'meta/lastCallNumber'), parseInt(num));
+  } catch(e) { console.warn('Could not save call number:', e); }
+}
+
+function getMapsUrl(d) {
+  if (d.lat && d.lng) {
+    // Precise coords from Google Places — opens exact pin
+    return 'https://www.google.com/maps?q=' + d.lat + ',' + d.lng;
+  } else if (d.location) {
+    // Fallback to text search
+    return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(d.location);
+  }
+  return null;
+}
+
+function buildWA(d) {
+  var lines = [];
+  if (d.urgent) lines.push('*URGENT CALL*');
+  if (window.lockedInsideNote) lines.push('*' + window.lockedInsideNote.toUpperCase() + '*');
+  if (d.urgent || window.lockedInsideNote) lines.push('');
+  lines.push('Call#:' + d.callNum);
+  lines.push('');
+  lines.push('Location:' + d.location);
+  var mapsUrl = getMapsUrl(d);
+  if (mapsUrl) lines.push(mapsUrl);
+  lines.push('');
+  lines.push('Phone:' + d.phone);
+  lines.push('');
+  lines.push('Name:' + d.name);
+  lines.push('');
+  lines.push('Nature:' + d.nature);
+  lines.push('');
+  lines.push('https://form.jotform.com/212776438913868');
+  lines.push('');
+  lines.push('SAFETY FIRST!  Please remember to wear your Chaverim vest.');
+  lines.push('Please remember to have the caller sign the waiver.');
+  return lines.join('\n');
+}
+
+function buildInt(d) {
+  var lines = [];
+  if (d.urgent) lines.push('*URGENT*');
+  if (window.lockedInsideNote) lines.push('*' + window.lockedInsideNote.toUpperCase() + '*');
+  if (d.urgent || window.lockedInsideNote) lines.push('');
+  lines.push('New Call (BC)');
+  lines.push('');
+  lines.push('Location: ' + d.location);
+  var mapsUrl = getMapsUrl(d);
+  if (mapsUrl) lines.push(mapsUrl);
+  lines.push('');
+  lines.push('Phone: ' + d.phone);
+  lines.push('');
+  lines.push('Name: ' + d.name);
+  lines.push('');
+  lines.push('Nature: ' + d.nature);
+  return lines.join('\n');
+}
+
+function showPreview(txt) {
+  document.getElementById('previewText').textContent = txt;
+  document.getElementById('preview').classList.add('on');
+}
+
+window.dispatchWhatsApp = async function() {
+  var d = getFormData();
+  if (!d.urgent) {
+    if (!d.callNum) { alert('Please enter a Call #.'); return; }
+    if (!d.location) { alert('Please enter a Location.'); return; }
+    if (!d.nature) { alert('Please select a Nature of Call.'); return; }
+  }
+  var msg = buildWA(d);
+  showPreview(msg);
+  await saveCallNumber(d.callNum);
+  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+};
+
+window.dispatchInterstate = async function() {
+  var d = getFormData();
+  if (!d.urgent) {
+    if (!d.location) { alert('Please enter a Location.'); return; }
+    if (!d.nature) { alert('Please select a Nature of Call.'); return; }
+  }
+  var msg = buildInt(d);
+  showPreview(msg);
+  await saveCallNumber(d.callNum);
+  window.open('https://wa.me/18458524357?text=' + encodeURIComponent(msg), '_blank');
+};
+
+window.verifyLocation = function() {
+  var loc = document.getElementById('location').value;
+  if (loc) window.open('https://maps.google.com/?q=' + encodeURIComponent(loc), '_blank');
+};
+
+window.clearForm = async function() {
+  ['phone','location','callerName','notes','vYear','vColor','acQuantity','floodEquipment','customNature'].forEach(function(id){
+    var el = document.getElementById(id); if (el) el.value = '';
+  });
+  window.clearMake();
+  document.getElementById('natureType').value = '';
+
+  window.lockedInsideNote = '';
+  window.isUrgent = false;
+  window.chips = {};
+  document.getElementById('urgentBar').classList.remove('active');
+  document.getElementById('vehicleFields').classList.remove('on');
+  document.getElementById('tireOpts').classList.remove('on');
+  document.getElementById('houseLockSide').style.display = '';
+  document.getElementById('houseLockSide').classList.remove('on');
+  document.getElementById('lockoutType').classList.remove('on');
+  document.getElementById('floodEquip').classList.remove('on');
+  document.getElementById('qtyField').classList.remove('on');
+  window.isOtherVehicle = false;
+  document.getElementById('otherVehicleBar').classList.remove('active');
+  document.getElementById('customNatureWrap').classList.remove('on');
+  document.querySelectorAll('.chip').forEach(function(c){ c.classList.remove('selected'); });
+  document.getElementById('preview').classList.remove('on');
+  document.getElementById('mapsLinkWrap').style.display = 'none';
+
+  // Load next call number fresh
+  try {
+    const snap = await get(ref(db, 'meta/lastCallNumber'));
+    const last = snap.exists() ? snap.val() : 1000;
+    document.getElementById('callNum').value = last + 1;
+  } catch(e) { document.getElementById('callNum').value = ''; }
+};
+
+// ── Init ──
+loadAll();
+</script>
+</body>
+</html>
