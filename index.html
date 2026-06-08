@@ -8,25 +8,34 @@
 <link rel="apple-touch-icon" href="https://i.ibb.co/Kc2B52nS/download-1.png" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css" />
 <script>
-// Must be global for Google Maps callback — defined before the API script loads
+// Google Maps Places Autocomplete
 window.initAutocomplete = function() {
-  var input = document.getElementById('location');
-  if (!input || !window.google) return;
+  // Retry until the input exists (page may still be rendering)
+  function attach() {
+    var input = document.getElementById('location');
+    if (!input) { setTimeout(attach, 100); return; }
+    if (!window.google || !window.google.maps || !window.google.maps.places) { setTimeout(attach, 100); return; }
 
-  var autocomplete = new google.maps.places.Autocomplete(input, {
-    types: ['geocode', 'establishment'],
-    componentRestrictions: { country: 'us' },
-    fields: ['formatted_address', 'geometry', 'name']
-  });
+    var autocomplete = new google.maps.places.Autocomplete(input, {
+      fields: ['formatted_address', 'geometry', 'name']
+    });
 
-  autocomplete.addListener('place_changed', function() {
-    var place = autocomplete.getPlace();
-    if (!place.geometry) return;
-    var address = place.formatted_address || place.name || input.value;
-    input.value = address;
-    input.dataset.lat = place.geometry.location.lat();
-    input.dataset.lng = place.geometry.location.lng();
-  });
+    // Bias results to NJ/NY area
+    var nj = new google.maps.LatLngBounds(
+      new google.maps.LatLng(38.9, -75.6),
+      new google.maps.LatLng(41.4, -73.8)
+    );
+    autocomplete.setBounds(nj);
+
+    autocomplete.addListener('place_changed', function() {
+      var place = autocomplete.getPlace();
+      if (!place || !place.geometry) return;
+      input.value = place.formatted_address || place.name || input.value;
+      input.dataset.lat = place.geometry.location.lat();
+      input.dataset.lng = place.geometry.location.lng();
+    });
+  }
+  attach();
 };
 </script>
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAFAsM0xqmKrnirTKIH9If2s4GuDpmO6BQ&libraries=places&loading=async&callback=initAutocomplete" async defer></script>
@@ -1017,68 +1026,18 @@ function showToast(msg) {
 }
 
 // ── Populate color datalist ──
-window.toggleColorDropdown = function() {
-  var btn = document.getElementById('colorDropdownBtn');
-  var menu = document.getElementById('colorDropdownMenu');
-  if (!btn || !menu) return;
-  var isOpen = menu.classList.contains('open');
-  if (isOpen) {
-    menu.classList.remove('open');
-    btn.classList.remove('open');
-  } else {
-    menu.classList.add('open');
-    btn.classList.add('open');
-    // Close on outside click
-    setTimeout(function() {
-      document.addEventListener('click', function handler(e) {
-        if (!document.getElementById('colorDropdown').contains(e.target)) {
-          menu.classList.remove('open');
-          btn.classList.remove('open');
-          document.removeEventListener('click', handler);
-        }
-      });
-    }, 0);
-  }
-};
-
-window.selectDesktopColor = function(color) {
-  document.getElementById('vColor').value = color;
-  var label = document.getElementById('colorDropdownLabel');
-  var dot   = document.getElementById('colorDot');
-  var btn   = document.getElementById('colorDropdownBtn');
-  var menu  = document.getElementById('colorDropdownMenu');
-  if (label) label.textContent = color || '— Select color —';
-  if (dot) {
-    var c = COLOR_MAP[color];
-    if (c) {
-      dot.style.background = c;
-      dot.style.borderColor = (color==='White'||color==='Beige'||color==='Silver') ? '#CCC' : 'rgba(0,0,0,0.12)';
-      dot.style.display = 'inline-block';
-    } else { dot.style.display = 'none'; }
-  }
-  if (menu) menu.querySelectorAll('.color-option').forEach(function(o){
-    o.classList.toggle('selected', o.dataset.value === color);
-  });
-  if (btn) btn.classList.remove('open');
-  if (menu) menu.classList.remove('open');
-  var customWrap = document.getElementById('customColorWrap');
-  if (customWrap) customWrap.style.display = (color === 'Other') ? 'block' : 'none';
-};
-
 function buildDesktopColorMenu(colors) {
-  var menu = document.getElementById('colorDropdownMenu');
+  var menu = document.getElementById('colorMenu');
   if (!menu) return;
   menu.innerHTML = '';
   colors.forEach(function(color) {
     var opt = document.createElement('div');
-    opt.className = 'color-option';
+    opt.className = 'cs-option';
     opt.dataset.value = color;
-    var c = COLOR_MAP[color] || '#999';
-    var border = (color==='White'||color==='Beige'||color==='Silver') ? '#CCC' : 'rgba(0,0,0,0.12)';
-    opt.innerHTML =
-      '<span class="color-dot" style="background:' + c + ';border-color:' + border + ';' + (!COLOR_MAP[color] ? 'display:none;' : '') + '"></span>' +
-      color;
-    opt.addEventListener('click', function() { window.selectDesktopColor(color); });
+    var c = COLOR_MAP[color] || null;
+    var dotHtml = c ? '<span class="color-dot" style="background:' + c + ';border-color:' + ((color==='White'||color==='Beige'||color==='Silver')?'#CCC':'rgba(0,0,0,0.1)') + ';"></span>' : '';
+    opt.innerHTML = dotHtml + color;
+    opt.onclick = function() { window.csSelect('color', color, color); };
     menu.appendChild(opt);
   });
 }
@@ -1198,7 +1157,8 @@ window.csToggle = function(id) {
 };
 
 window.csSelect = function(id, value, label) {
-  var input  = document.getElementById(id === 'nature' ? 'natureType' : id === 'year' ? 'vYear' : id === 'make' ? 'vMake' : 'vModel');
+  var inputId = { nature:'natureType', year:'vYear', make:'vMake', model:'vModel', color:'vColor' };
+  var input  = document.getElementById(inputId[id] || id);
   var btnLbl = document.getElementById(id + 'BtnLabel');
   var menu   = document.getElementById(id + 'Menu');
   var btn    = document.getElementById(id + 'Btn');
@@ -1208,6 +1168,19 @@ window.csSelect = function(id, value, label) {
   if (menu)   { menu.querySelectorAll('.cs-option').forEach(function(o){ o.classList.toggle('selected', o.dataset.value === value); }); menu.classList.remove('open'); }
   if (btn)    btn.classList.remove('open');
 
+  // Show color dot in button
+  if (id === 'color') {
+    var dot = document.getElementById('colorDot');
+    if (dot) {
+      var c = COLOR_MAP[value];
+      if (c) {
+        dot.style.background = c;
+        dot.style.borderColor = (value==='White'||value==='Beige'||value==='Silver') ? '#CCC' : 'rgba(0,0,0,0.1)';
+        dot.style.display = 'inline-block';
+      } else { dot.style.display = 'none'; }
+    }
+  }
+
   // Trigger downstream handlers
   if (id === 'nature') window.onNatureChange();
   if (id === 'make')   window.onMakeChange();
@@ -1215,7 +1188,6 @@ window.csSelect = function(id, value, label) {
   if (id === 'color')  window.onColorChange();
 };
 
-// Reset a custom select back to placeholder
 window.csReset = function(id) {
   var placeholders = { nature: '— Select type —', year: '— Year —', make: '— Select make —', model: '— Select model —', color: '— Select color —' };
   var inputId = { nature:'natureType', year:'vYear', make:'vMake', model:'vModel', color:'vColor' };
@@ -1226,7 +1198,8 @@ window.csReset = function(id) {
   if (input)  input.value = '';
   if (btnLbl) { btnLbl.textContent = placeholders[id]; btnLbl.classList.add('placeholder'); }
   if (menu)   { menu.querySelectorAll('.cs-option').forEach(function(o){ o.classList.remove('selected'); }); menu.classList.remove('open'); }
-  if (btn)    { btn.classList.remove('open'); }
+  if (btn)    btn.classList.remove('open');
+  if (id === 'color') { var dot = document.getElementById('colorDot'); if (dot) dot.style.display = 'none'; }
 };
 
 // ── Populate year menu ──
@@ -1362,14 +1335,14 @@ function buildMakeModelUI() {
     // Desktop: custom color dropdown with swatches, make/model as datalist
     if (colorWrap) {
       colorWrap.innerHTML =
-        '<div class="color-dropdown" id="colorDropdown">' +
-          '<input type="hidden" id="vColor" />' +
-          '<button type="button" class="color-dropdown-btn" id="colorDropdownBtn" onclick="window.toggleColorDropdown()">' +
-            '<span class="color-dot" id="colorDot" style="display:none;"></span>' +
-            '<span id="colorDropdownLabel">— Select color —</span>' +
-            '<i class="ti ti-chevron-down chevron"></i>' +
+        '<div class="custom-select-wrap" id="colorWrap">' +
+          '<button type="button" class="custom-select-btn" id="colorBtn" onclick="window.csToggle(\'color\')">' +
+            '<span id="colorDot" class="color-dot" style="display:none;"></span>' +
+            '<span class="cs-label placeholder" id="colorBtnLabel">— Select color —</span>' +
+            '<span class="cs-chevron"><i class="ti ti-chevron-down"></i></span>' +
           '</button>' +
-          '<div class="color-dropdown-menu" id="colorDropdownMenu"></div>' +
+          '<input type="hidden" id="vColor" />' +
+          '<div class="custom-select-menu" id="colorMenu"></div>' +
         '</div>' +
         '<button class="save-custom-btn" onclick="window.saveCustomColor()" title="Save color" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);"><i class="ti ti-plus"></i></button>';
       colorWrap.style.position = 'relative';
