@@ -1083,36 +1083,6 @@ function buildDesktopColorMenu(colors) {
   });
 }
 
-function populateColors(colors) {
-  var allColors = colors.filter(function(c){ return c !== 'Other'; }).concat(['Other']);
-  window._colorOptions = allColors;
-
-  var overlay = document.getElementById('colorPickerOverlay');
-  if (overlay) overlay.remove();
-
-  if (isMobile) {
-    // Mobile: rebuild overlay from _colorOptions on next open
-  } else {
-    // Desktop: populate custom dropdown menu
-    buildDesktopColorMenu(allColors);
-    // Also keep hidden input in sync
-    var sel = document.getElementById('vColor');
-    // hidden input — no options needed
-  }
-}
-
-window.onColorChange = function() {
-  var color = document.getElementById('vColor') ? document.getElementById('vColor').value : '';
-  var customWrap = document.getElementById('customColorWrap');
-  if (customWrap) customWrap.style.display = (color === 'Other') ? 'block' : 'none';
-};
-
-window.onModelInputChange = function() {
-  var model = document.getElementById('vModel') ? document.getElementById('vModel').value.trim() : '';
-  var customWrap = document.getElementById('customModelWrap');
-  if (customWrap) customWrap.style.display = (model === 'Other') ? 'block' : 'none';
-};
-
 // ── Color → CSS color map for swatches ──
 var COLOR_MAP = {
   'Beige':'#F5F0DC','Black':'#1A1A1A','Blue':'#2563EB','Brown':'#7B4A2D',
@@ -1122,26 +1092,16 @@ var COLOR_MAP = {
   'Yellow':'#FDD835'
 };
 
-function getSwatchHtml(color) {
-  var c = COLOR_MAP[color];
-  if (!c) return '';
-  var border = (color === 'White' || color === 'Beige' || color === 'Silver') ? '#CCC' : c;
-  return '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + c + ';border:1px solid ' + border + ';margin-right:6px;vertical-align:middle;"></span>';
-}
-
-// On mobile, <select> doesn't support HTML in options.
-// We use a custom dropdown overlay instead for color.
+// Mobile color picker (bottom sheet)
 function buildColorSelect(colors, wrap) {
-  // Use a button that opens a custom color picker overlay
-  var current = '';
   wrap.innerHTML =
-    '<button type="button" id="colorPickerBtn" onclick="window.openColorPicker()" style="width:100%;padding:11px 40px 11px 14px;border:1.5px solid #E0CC80;border-radius:10px;font-size:14px;background:#FFFEF5;color:#1A1400;font-family:inherit;text-align:left;cursor:pointer;display:flex;align-items:center;gap:8px;-webkit-appearance:none;">' +
+    '<button type="button" id="colorPickerBtn" onclick="window.openColorPicker()" style="width:100%;padding:11px 40px 11px 14px;border:1.5px solid #E0CC80;border-radius:10px;font-size:14px;background:#FFFEF5;color:#1A1400;font-family:inherit;text-align:left;cursor:pointer;display:flex;align-items:center;gap:8px;-webkit-appearance:none;position:relative;">' +
       '<span id="colorPickerSwatch" style="width:14px;height:14px;border-radius:50%;border:1px solid #CCC;flex-shrink:0;display:none;"></span>' +
-      '<span id="colorPickerLabel" style="flex:1;">— Select color —</span>' +
+      '<span id="colorPickerLabel" style="flex:1;color:#C0A860;">— Select color —</span>' +
       '<i class="ti ti-chevron-down" style="color:#C8A532;font-size:14px;position:absolute;right:12px;"></i>' +
     '</button>' +
     '<input type="hidden" id="vColor" />' +
-    '<button class="save-custom-btn" onclick="window.saveCustomColor()" title="Save color" style="position:absolute;right:36px;top:50%;transform:translateY(-50%);"><i class="ti ti-plus"></i></button>';
+    '<button class="save-custom-btn" onclick="window.saveCustomColor()" title="Save color" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);"><i class="ti ti-plus"></i></button>';
   wrap.style.position = 'relative';
 }
 
@@ -1150,8 +1110,6 @@ window._colorOptions = [];
 window.openColorPicker = function() {
   var overlay = document.getElementById('colorPickerOverlay');
   if (overlay) { overlay.style.display = 'flex'; return; }
-
-  // Build overlay
   overlay = document.createElement('div');
   overlay.id = 'colorPickerOverlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:2000;display:flex;align-items:flex-end;justify-content:center;';
@@ -1161,7 +1119,6 @@ window.openColorPicker = function() {
   title.style.cssText = 'font-size:15px;font-weight:600;color:#1A1400;margin-bottom:1rem;';
   title.textContent = 'Select Color';
   sheet.appendChild(title);
-
   window._colorOptions.forEach(function(color) {
     var btn = document.createElement('button');
     btn.type = 'button';
@@ -1169,15 +1126,11 @@ window.openColorPicker = function() {
     var cssColor = COLOR_MAP[color] || '#999';
     var border = (color==='White'||color==='Beige'||color==='Silver') ? '#CCC' : cssColor;
     btn.innerHTML = '<span style="width:18px;height:18px;border-radius:50%;background:' + cssColor + ';border:1.5px solid ' + border + ';flex-shrink:0;"></span>' + color;
-    btn.addEventListener('click', function() {
-      window.setColor(color);
-      overlay.style.display = 'none';
-    });
+    btn.addEventListener('click', function() { window.setColor(color); overlay.style.display = 'none'; });
     btn.addEventListener('mouseenter', function(){ btn.style.background = '#F5ECC0'; });
     btn.addEventListener('mouseleave', function(){ btn.style.background = 'transparent'; });
     sheet.appendChild(btn);
   });
-
   overlay.appendChild(sheet);
   overlay.addEventListener('click', function(e){ if(e.target===overlay) overlay.style.display='none'; });
   document.body.appendChild(overlay);
@@ -1187,45 +1140,23 @@ window.setColor = function(color) {
   document.getElementById('vColor').value = color;
   var label = document.getElementById('colorPickerLabel');
   var swatch = document.getElementById('colorPickerSwatch');
-  if (label) label.textContent = color || '— Select color —';
+  if (label) { label.textContent = color || '— Select color —'; label.style.color = color ? '#1A1400' : '#C0A860'; }
   if (swatch) {
     var c = COLOR_MAP[color];
-    if (c) {
-      var border = (color==='White'||color==='Beige'||color==='Silver') ? '#CCC' : c;
-      swatch.style.background = c;
-      swatch.style.borderColor = border;
-      swatch.style.display = 'inline-block';
-    } else { swatch.style.display = 'none'; }
+    if (c) { var border = (color==='White'||color==='Beige'||color==='Silver') ? '#CCC' : c; swatch.style.background = c; swatch.style.borderColor = border; swatch.style.display = 'inline-block'; }
+    else { swatch.style.display = 'none'; }
   }
-  // Handle Other
   var customWrap = document.getElementById('customColorWrap');
   if (customWrap) customWrap.style.display = (color === 'Other') ? 'block' : 'none';
 };
 
-// ── Handle Other for make/model selects ──
-window.onMakeChange = function() {
-  var make = document.getElementById('vMake').value;
-  var customWrap = document.getElementById('customMakeWrap');
-  if (customWrap) customWrap.style.display = (make === 'Other') ? 'block' : 'none';
-  if (make === 'Other') { updateMakeLogo(''); return; }
-  updateMakeLogo(make);
-  var modelEl = document.getElementById('vModel');
-  if (modelEl && modelEl.tagName === 'SELECT') { modelEl.innerHTML = '<option value="">— Select model —</option>'; modelEl.disabled = true; }
-  var customModelWrap = document.getElementById('customModelWrap');
-  if (customModelWrap) customModelWrap.style.display = 'none';
-  if (!make || !window.makesData[make]) return;
-  var models = window.makesData[make];
-  if (models.models) models = models.models;
-  if (!Array.isArray(models)) return;
-  populateModels(models);
-  if (modelEl && modelEl.tagName === 'SELECT') modelEl.disabled = false;
-};
-
-window.onModelChange = function() {
-  var model = document.getElementById('vModel') ? document.getElementById('vModel').value : '';
-  var customWrap = document.getElementById('customModelWrap');
-  if (customWrap) customWrap.style.display = (model === 'Other') ? 'block' : 'none';
-};
+function populateColors(colors) {
+  var allColors = colors.filter(function(c){ return c !== 'Other'; }).concat(['Other']);
+  window._colorOptions = allColors;
+  var overlay = document.getElementById('colorPickerOverlay');
+  if (overlay) overlay.remove();
+  if (!isMobile) buildDesktopColorMenu(allColors);
+}
 
 // ═══════════════════════════════════════════════
 // ── Universal Custom Select System ──
@@ -1523,99 +1454,6 @@ function updateMakeLogo(make) {
   }
 }
 
-// ── Populate make — handles both select (mobile) and datalist (desktop) ──
-function populateMakes(makesObj) {
-  var makes = Object.keys(makesObj).sort();
-  if (isMobile) {
-    var sel = document.getElementById('vMake');
-    if (!sel || sel.tagName !== 'SELECT') return;
-    var current = sel.value;
-    sel.innerHTML = '<option value="">— Select make —</option>';
-    makes.filter(function(m){ return m !== 'Other'; }).forEach(function(m) {
-      var opt = document.createElement('option'); opt.value = m; opt.textContent = m; sel.appendChild(opt);
-    });
-    var otherOpt = document.createElement('option'); otherOpt.value = 'Other'; otherOpt.textContent = 'Other'; sel.appendChild(otherOpt);
-    if (current) sel.value = current;
-  } else {
-    var dl = document.getElementById('makeList');
-    if (!dl) return;
-    dl.innerHTML = '';
-    makes.forEach(function(m) {
-      var opt = document.createElement('option'); opt.value = m; dl.appendChild(opt);
-    });
-  }
-}
-
-function populateModels(models) {
-  if (isMobile) {
-    var sel = document.getElementById('vModel');
-    if (!sel || sel.tagName !== 'SELECT') return;
-    sel.innerHTML = '<option value="">— Select model —</option>';
-    sel.disabled = !models || models.length === 0;
-    if (models) {
-      models.filter(function(m){ return m !== 'Other'; }).forEach(function(m) {
-        var opt = document.createElement('option'); opt.value = m; opt.textContent = m; sel.appendChild(opt);
-      });
-      var otherOpt = document.createElement('option'); otherOpt.value = 'Other'; otherOpt.textContent = 'Other'; sel.appendChild(otherOpt);
-    }
-  } else {
-    var dl = document.getElementById('modelList');
-    if (!dl) return;
-    dl.innerHTML = '';
-    if (models) models.forEach(function(m) {
-      var opt = document.createElement('option'); opt.value = m; dl.appendChild(opt);
-    });
-  }
-}
-
-// ── On make change (mobile select) ──
-window.onMakeChange = function() {
-  var make = document.getElementById('vMake').value;
-  updateMakeLogo(make);
-  var modelEl = document.getElementById('vModel');
-  if (modelEl && modelEl.tagName === 'SELECT') { modelEl.innerHTML = '<option value="">— Select model —</option>'; modelEl.disabled = true; }
-  if (!make || !window.makesData[make]) return;
-  var models = window.makesData[make];
-  if (models.models) models = models.models;
-  if (!Array.isArray(models)) return;
-  populateModels(models);
-  if (modelEl && modelEl.tagName === 'SELECT') modelEl.disabled = false;
-};
-
-// ── On make input (desktop datalist) ──
-window.onMakeInput = function() {
-  var make = document.getElementById('vMake').value.trim();
-  updateMakeLogo(make);
-  // Repopulate make datalist (so backspace still shows all)
-  var makeDl = document.getElementById('makeList');
-  if (makeDl) {
-    makeDl.innerHTML = '';
-    Object.keys(window.makesData).sort().forEach(function(m) {
-      var opt = document.createElement('option'); opt.value = m; makeDl.appendChild(opt);
-    });
-  }
-  var modelEl = document.getElementById('vModel');
-  if (modelEl) modelEl.value = '';
-  if (!make || !window.makesData[make]) { populateModels([]); return; }
-  var models = window.makesData[make];
-  if (models.models) models = models.models;
-  if (!Array.isArray(models)) return;
-  populateModels(models);
-};
-
-// ── Clear make + model ──
-window.clearMake = function() {
-  var makeEl = document.getElementById('vMake');
-  var modelEl = document.getElementById('vModel');
-  if (makeEl) makeEl.value = '';
-  if (modelEl) {
-    if (modelEl.tagName === 'SELECT') { modelEl.innerHTML = '<option value="">— Select model —</option>'; modelEl.disabled = true; }
-    else { modelEl.value = ''; }
-  }
-  var dl = document.getElementById('modelList'); if (dl) dl.innerHTML = '';
-  updateMakeLogo('');
-};
-
 // ── Save custom color ──
 window.saveCustomColor = async function() {
   var color = isMobile ? prompt('Enter color to save:') : document.getElementById('vColor').value.trim();
@@ -1701,7 +1539,7 @@ var VEHICLE_NATURES = ['flat_tire','boost','out_of_gas','lockout','vehicle_stall
 var QTY_NATURES = { heater: 'Heater units', ac: 'AC units' };
 
 window.onNatureChange = function() {
-  var val = document.getElementById('natureType').value;
+  var val = document.getElementById('natureType') ? document.getElementById('natureType').value : '';
   var isVeh = VEHICLE_NATURES.indexOf(val) !== -1;
 
   document.getElementById('vehicleFields').classList.toggle('on', isVeh);
@@ -1986,9 +1824,6 @@ window.clearForm = async function() {
   window.csReset('nature');
   window.csReset('year');
   window.csReset('color');
-  window.clearMake();
-    var el = document.getElementById(id); if (el) el.value = '';
-  });
   window.clearMake();
   document.getElementById('natureType').value = '';
 
