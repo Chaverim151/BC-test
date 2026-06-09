@@ -8,34 +8,58 @@
 <link rel="apple-touch-icon" href="https://i.ibb.co/Kc2B52nS/download-1.png" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css" />
 <script>
-// Google Maps Places Autocomplete
-window.initAutocomplete = function() {
-  // Retry until the input exists (page may still be rendering)
-  function attach() {
-    var input = document.getElementById('location');
-    if (!input) { setTimeout(attach, 100); return; }
-    if (!window.google || !window.google.maps || !window.google.maps.places) { setTimeout(attach, 100); return; }
-
-    var autocomplete = new google.maps.places.Autocomplete(input, {
-      fields: ['formatted_address', 'geometry', 'name']
-    });
-
-    // Bias results to NJ/NY area
-    var nj = new google.maps.LatLngBounds(
-      new google.maps.LatLng(38.9, -75.6),
-      new google.maps.LatLng(41.4, -73.8)
-    );
-    autocomplete.setBounds(nj);
-
-    autocomplete.addListener('place_changed', function() {
-      var place = autocomplete.getPlace();
-      if (!place || !place.geometry) return;
-      input.value = place.formatted_address || place.name || input.value;
-      input.dataset.lat = place.geometry.location.lat();
-      input.dataset.lng = place.geometry.location.lng();
-    });
+window.initAutocomplete = async function() {
+  function waitFor(fn, cb) {
+    if (fn()) cb(); else setTimeout(function(){ waitFor(fn, cb); }, 100);
   }
-  attach();
+  waitFor(
+    function() { return window.google && window.google.maps && window.google.maps.places && document.getElementById('locationWrap'); },
+    async function() {
+      try {
+        var wrap = document.getElementById('locationWrap');
+        var oldInput = document.getElementById('location');
+
+        // Try new PlaceAutocompleteElement first
+        if (window.google.maps.places.PlaceAutocompleteElement) {
+          var pac = new google.maps.places.PlaceAutocompleteElement();
+          // Inject before the map button, replacing the old input
+          wrap.insertBefore(pac, oldInput.nextSibling);
+          oldInput.style.display = 'none';
+
+          // Forward value reads to a hidden input so rest of form still works
+          pac.addEventListener('gmp-placeselect', async function(evt) {
+            var pred = evt.placePrediction;
+            var place = pred.toPlace();
+            await place.fetchFields({ fields: ['displayName','formattedAddress','location'] });
+            oldInput.value = place.formattedAddress || place.displayName || '';
+            if (place.location) {
+              oldInput.dataset.lat = place.location.lat();
+              oldInput.dataset.lng = place.location.lng();
+            }
+          });
+
+          // Style the pac element to match our inputs
+          pac.style.cssText = 'flex:1;';
+          pac.setAttribute('placeholder', '123 Main St, Edison, NJ');
+
+        // Fallback: legacy Autocomplete (works for older API keys)
+        } else if (window.google.maps.places.Autocomplete) {
+          var ac = new google.maps.places.Autocomplete(oldInput, {
+            fields: ['formatted_address','geometry','name']
+          });
+          ac.addListener('place_changed', function() {
+            var place = ac.getPlace();
+            if (!place || !place.geometry) return;
+            oldInput.value = place.formatted_address || place.name || oldInput.value;
+            oldInput.dataset.lat = place.geometry.location.lat();
+            oldInput.dataset.lng = place.geometry.location.lng();
+          });
+        }
+      } catch(e) {
+        console.warn('Maps autocomplete init error:', e);
+      }
+    }
+  );
 };
 </script>
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAFAsM0xqmKrnirTKIH9If2s4GuDpmO6BQ&libraries=places&loading=async&callback=initAutocomplete" async defer></script>
@@ -212,7 +236,31 @@ window.initAutocomplete = function() {
   /* Keep color dot style */
   .color-dot { width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.1); }
 
-  /* ── Google Places autocomplete ── */
+  /* ── Google Places PlaceAutocompleteElement (new API) ── */
+  gmp-place-autocomplete {
+    width: 100%;
+    flex: 1;
+  }
+  gmp-place-autocomplete::part(input) {
+    width: 100%;
+    padding: 11px 90px 11px 14px;
+    border: 1.5px solid #E0CC80;
+    border-radius: 10px;
+    font-size: 14px;
+    background: #FFFEF5;
+    color: #1A1400;
+    font-family: inherit;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    outline: none;
+    box-sizing: border-box;
+  }
+  gmp-place-autocomplete::part(input):focus {
+    border-color: #C8A532;
+    box-shadow: 0 0 0 3px rgba(200,165,50,0.16);
+    background: #FFFFFF;
+  }
+
+  /* ── Google Places autocomplete dropdown (both old and new) ── */
   .pac-container {
     border-radius: 12px !important;
     border: 1.5px solid #E0CC80 !important;
@@ -493,7 +541,7 @@ window.initAutocomplete = function() {
       <!-- Location -->
       <div class="field">
         <div class="lbl"><i class="ti ti-map-pin"></i> Location <span class="req">*</span></div>
-        <div class="inp-wrap loc-wrap">
+        <div class="inp-wrap loc-wrap" id="locationWrap">
           <input type="text" id="location" placeholder="123 Main St, Edison, NJ" style="padding-right:90px;" oninput="document.getElementById('location').dataset.lat=''; document.getElementById('location').dataset.lng='';" />
           <button class="field-clear" onclick="window.clearField('location')" tabindex="-1" style="right:56px;">&times;</button>
           <button class="map-btn" onclick="window.verifyLocation()"><i class="ti ti-map-pin" style="font-size:12px;"></i> Map</button>
