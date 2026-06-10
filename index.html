@@ -9,21 +9,34 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css" />
 <script>
 window.initAutocomplete = function() {
-  var input = document.getElementById('location');
-  if (!input || !window.google) return;
-  var ac = new google.maps.places.Autocomplete(input, {
-    fields: ['formatted_address', 'geometry', 'name']
-  });
-  ac.addListener('place_changed', function() {
-    var place = ac.getPlace();
-    if (!place || !place.geometry) return;
-    input.value = place.formatted_address || place.name || input.value;
-    input.dataset.lat = place.geometry.location.lat();
-    input.dataset.lng = place.geometry.location.lng();
-  });
+  try {
+    var input = document.getElementById('location');
+    if (!input) { console.error('location input not found'); return; }
+    if (!window.google || !window.google.maps || !window.google.maps.places) {
+      console.error('Google Maps Places not loaded');
+      return;
+    }
+    if (!window.google.maps.places.Autocomplete) {
+      console.error('Autocomplete class not available');
+      return;
+    }
+    var ac = new google.maps.places.Autocomplete(input, {
+      fields: ['formatted_address', 'geometry', 'name']
+    });
+    ac.addListener('place_changed', function() {
+      var place = ac.getPlace();
+      if (!place || !place.geometry) return;
+      input.value = place.formatted_address || place.name || input.value;
+      input.dataset.lat = place.geometry.location.lat();
+      input.dataset.lng = place.geometry.location.lng();
+    });
+    console.log('Maps autocomplete initialized OK');
+  } catch(e) {
+    console.error('Maps autocomplete error:', e);
+  }
 };
 </script>
-<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAFAsM0xqmKrnirTKIH9If2s4GuDpmO6BQ&libraries=places&v=weekly&callback=initAutocomplete" async defer></script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAFAsM0xqmKrnirTKIH9If2s4GuDpmO6BQ&libraries=places&v=3.55&callback=initAutocomplete" async defer></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F2ECD8; min-height: 100vh; -webkit-text-size-adjust: 100%; }
