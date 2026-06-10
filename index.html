@@ -10,33 +10,46 @@
 <script>
 window.initAutocomplete = function() {
   try {
-    var input = document.getElementById('location');
-    if (!input) { console.error('location input not found'); return; }
-    if (!window.google || !window.google.maps || !window.google.maps.places) {
-      console.error('Google Maps Places not loaded');
-      return;
-    }
-    if (!window.google.maps.places.Autocomplete) {
-      console.error('Autocomplete class not available');
-      return;
-    }
-    var ac = new google.maps.places.Autocomplete(input, {
-      fields: ['formatted_address', 'geometry', 'name']
+    var wrap = document.getElementById('locationWrap');
+    var oldInput = document.getElementById('location');
+    if (!wrap || !oldInput) { console.error('location elements not found'); return; }
+    if (!window.google || !window.google.maps || !window.google.maps.places) { console.error('Places not loaded'); return; }
+
+    // Build the PlaceAutocompleteElement
+    var pac = new google.maps.places.PlaceAutocompleteElement();
+
+    // Hide the old input, insert pac before the Map button
+    oldInput.style.display = 'none';
+    var mapBtn = wrap.querySelector('.map-btn');
+    var clearBtn = wrap.querySelector('.field-clear');
+    wrap.insertBefore(pac, mapBtn || clearBtn || null);
+
+    // When user picks a suggestion
+    pac.addEventListener('gmp-placeselect', async function(e) {
+      var place = e.placePrediction.toPlace();
+      await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location'] });
+      var addr = place.formattedAddress || place.displayName || '';
+      oldInput.value = addr;
+      if (place.location) {
+        oldInput.dataset.lat = place.location.lat();
+        oldInput.dataset.lng = place.location.lng();
+      }
     });
-    ac.addListener('place_changed', function() {
-      var place = ac.getPlace();
-      if (!place || !place.geometry) return;
-      input.value = place.formatted_address || place.name || input.value;
-      input.dataset.lat = place.geometry.location.lat();
-      input.dataset.lng = place.geometry.location.lng();
+
+    // When user types freely (no selection), keep oldInput in sync for dispatch
+    pac.addEventListener('input', function(e) {
+      oldInput.value = e.target.value || '';
+      oldInput.dataset.lat = '';
+      oldInput.dataset.lng = '';
     });
-    console.log('Maps autocomplete initialized OK');
+
+    console.log('PlaceAutocompleteElement initialized OK');
   } catch(e) {
     console.error('Maps autocomplete error:', e);
   }
 };
 </script>
-<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAFAsM0xqmKrnirTKIH9If2s4GuDpmO6BQ&libraries=places&v=3.55&callback=initAutocomplete" async defer></script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAFAsM0xqmKrnirTKIH9If2s4GuDpmO6BQ&libraries=places&v=beta&callback=initAutocomplete" async defer></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F2ECD8; min-height: 100vh; -webkit-text-size-adjust: 100%; }
@@ -64,6 +77,9 @@ window.initAutocomplete = function() {
   .use-call-btn:hover { background: #388E3C; }
 
   /* ── Location ── */
+  .loc-wrap { position: relative; display: flex; align-items: center; gap: 0; }
+  .loc-wrap input { padding-right: 90px; flex: 1; }
+  .loc-wrap gmp-place-autocomplete { flex: 1; }
   .beta-tag { display: inline-block; background: #C8A532; color: #0F0E06; font-size: 9px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; vertical-align: middle; margin-left: 6px; position: relative; top: -2px; }
   .db-loading { display: flex; align-items: center; gap: 8px; background: #1A1600; border: 1px solid #3A3010; border-radius: 10px; padding: 0.6rem 1rem; margin-bottom: 1rem; font-size: 12px; color: #9A8030; }
   .db-loading.hidden { display: none; }
@@ -209,6 +225,31 @@ window.initAutocomplete = function() {
 
   /* Keep color dot style */
   .color-dot { width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.1); }
+
+  /* ── PlaceAutocompleteElement styling ── */
+  gmp-place-autocomplete {
+    flex: 1;
+    min-width: 0;
+  }
+  gmp-place-autocomplete::part(input) {
+    width: 100%;
+    padding: 11px 90px 11px 14px !important;
+    border: 1.5px solid #E0CC80 !important;
+    border-radius: 10px !important;
+    font-size: 14px !important;
+    background: #FFFEF5 !important;
+    color: #1A1400 !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+    box-shadow: none !important;
+    outline: none !important;
+    height: auto !important;
+    transition: border-color 0.15s, box-shadow 0.15s !important;
+  }
+  gmp-place-autocomplete::part(input):focus {
+    border-color: #C8A532 !important;
+    box-shadow: 0 0 0 3px rgba(200,165,50,0.16) !important;
+    background: #FFFFFF !important;
+  }
 
   /* ── Google Places autocomplete dropdown ── */
   .pac-container {
