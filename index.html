@@ -10,43 +10,36 @@
 <script>
 window.initAutocomplete = function() {
   try {
-    var wrap = document.getElementById('locationWrap');
-    var oldInput = document.getElementById('location');
-    if (!wrap || !oldInput) { console.error('location elements not found'); return; }
-    if (!window.google || !window.google.maps || !window.google.maps.places) { console.error('Places not loaded'); return; }
+    var pac = document.getElementById('locationPac');
+    var hidden = document.getElementById('location');
+    if (!pac || !hidden) return;
 
-    // Build the PlaceAutocompleteElement
-    var pac = new google.maps.places.PlaceAutocompleteElement();
+    // Bias results to Bergen County, NJ
+    var bergenCenter = new google.maps.LatLng(40.9584, -74.0742);
+    var circle = new google.maps.Circle({ center: bergenCenter, radius: 20000 });
+    pac.bounds = circle.getBounds();
+    pac.strictBounds = false; // bias not restrict
 
-    // Hide the old input, insert pac before the Map button
-    oldInput.style.display = 'none';
-    var mapBtn = wrap.querySelector('.map-btn');
-    var clearBtn = wrap.querySelector('.field-clear');
-    wrap.insertBefore(pac, mapBtn || clearBtn || null);
-
-    // When user picks a suggestion
     pac.addEventListener('gmp-placeselect', async function(e) {
-      var place = e.placePrediction.toPlace();
-      await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location'] });
-      var addr = place.formattedAddress || place.displayName || '';
-      oldInput.value = addr;
-      if (place.location) {
-        oldInput.dataset.lat = place.location.lat();
-        oldInput.dataset.lng = place.location.lng();
-      }
+      try {
+        var place = e.placePrediction.toPlace();
+        await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location'] });
+        var addr = place.formattedAddress || place.displayName || '';
+        hidden.value = addr;
+        hidden.dataset.lat = place.location ? place.location.lat() : '';
+        hidden.dataset.lng = place.location ? place.location.lng() : '';
+      } catch(err) { console.warn('place fetch:', err); }
     });
 
-    // When user types freely (no selection), keep oldInput in sync for dispatch
+    // Also sync typed text to hidden input for dispatch
     pac.addEventListener('input', function(e) {
-      oldInput.value = e.target.value || '';
-      oldInput.dataset.lat = '';
-      oldInput.dataset.lng = '';
+      hidden.value = e.target.value || pac.value || '';
+      hidden.dataset.lat = '';
+      hidden.dataset.lng = '';
     });
 
-    console.log('PlaceAutocompleteElement initialized OK');
-  } catch(e) {
-    console.error('Maps autocomplete error:', e);
-  }
+    console.log('Autocomplete ready');
+  } catch(e) { console.error('Maps init error:', e); }
 };
 </script>
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAFAsM0xqmKrnirTKIH9If2s4GuDpmO6BQ&libraries=places&v=beta&callback=initAutocomplete" async defer></script>
@@ -76,10 +69,37 @@ window.initAutocomplete = function() {
   .use-call-btn { background: #2E7D32; border: none; border-radius: 6px; padding: 4px 10px; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; white-space: nowrap; }
   .use-call-btn:hover { background: #388E3C; }
 
-  /* ── Location ── */
-  .loc-wrap { position: relative; display: flex; align-items: center; gap: 0; }
-  .loc-wrap input { padding-right: 90px; flex: 1; }
-  .loc-wrap gmp-place-autocomplete { flex: 1; }
+  /* ── Location field ── */
+  .loc-wrap {
+    position: relative;
+    display: flex; align-items: center;
+    border: 1.5px solid #E0CC80;
+    border-radius: 10px;
+    background: #FFFEF5;
+    transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  }
+  .loc-wrap:focus-within {
+    border-color: #C8A532;
+    box-shadow: 0 0 0 3px rgba(200,165,50,0.16);
+    background: #FFFFFF;
+  }
+  .loc-wrap gmp-place-autocomplete {
+    flex: 1; min-width: 0;
+  }
+  /* Strip all internal styling from pac element */
+  gmp-place-autocomplete, gmp-place-autocomplete * { box-shadow: none !important; }
+  gmp-place-autocomplete::part(input) {
+    border: none !important; outline: none !important;
+    box-shadow: none !important; background: transparent !important;
+    padding: 11px 72px 11px 14px !important;
+    font-size: 14px !important; font-family: inherit !important;
+    color: #1A1400 !important; width: 100% !important;
+    border-radius: 10px !important;
+  }
+  gmp-place-autocomplete::part(search-icon),
+  gmp-place-autocomplete::part(clear-icon) { display: none !important; }
+  .map-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: #0F0E06; border: none; border-radius: 7px; padding: 6px 10px; color: #C8A532; font-size: 11px; cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 3px; white-space: nowrap; font-weight: 600; z-index: 1; }
+  .map-btn:hover { background: #1E1C08; }
   .beta-tag { display: inline-block; background: #C8A532; color: #0F0E06; font-size: 9px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; vertical-align: middle; margin-left: 6px; position: relative; top: -2px; }
   .db-loading { display: flex; align-items: center; gap: 8px; background: #1A1600; border: 1px solid #3A3010; border-radius: 10px; padding: 0.6rem 1rem; margin-bottom: 1rem; font-size: 12px; color: #9A8030; }
   .db-loading.hidden { display: none; }
@@ -226,30 +246,7 @@ window.initAutocomplete = function() {
   /* Keep color dot style */
   .color-dot { width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.1); }
 
-  /* ── PlaceAutocompleteElement styling ── */
-  gmp-place-autocomplete {
-    flex: 1;
-    min-width: 0;
-  }
-  gmp-place-autocomplete::part(input) {
-    width: 100%;
-    padding: 11px 90px 11px 14px !important;
-    border: 1.5px solid #E0CC80 !important;
-    border-radius: 10px !important;
-    font-size: 14px !important;
-    background: #FFFEF5 !important;
-    color: #1A1400 !important;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
-    box-shadow: none !important;
-    outline: none !important;
-    height: auto !important;
-    transition: border-color 0.15s, box-shadow 0.15s !important;
-  }
-  gmp-place-autocomplete::part(input):focus {
-    border-color: #C8A532 !important;
-    box-shadow: 0 0 0 3px rgba(200,165,50,0.16) !important;
-    background: #FFFFFF !important;
-  }
+  /* ── Location field — standard inp-wrap, pac element hidden off-screen ── */
 
   /* ── Google Places autocomplete dropdown ── */
   .pac-container {
@@ -280,10 +277,6 @@ window.initAutocomplete = function() {
   #colorPickerOverlay .color-option { border-radius: 8px; margin: 2px 0; border-bottom: none; }
   #colorPickerOverlay .color-option:hover { background: #F5ECC0; }
   #colorPickerOverlay .color-option.selected { background: #EDE0A0; }
-  .loc-wrap { position: relative; }
-  .loc-wrap input { padding-right: 72px; }
-  .map-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: #0F0E06; border: none; border-radius: 7px; padding: 6px 10px; color: #C8A532; font-size: 11px; cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 3px; white-space: nowrap; font-weight: 600; }
-  .map-btn:hover { background: #1E1C08; }
 
   /* ── Section subheader ── */
   .sub-hdr { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 600; color: #8B6E1A; letter-spacing: 1.5px; text-transform: uppercase; margin: 1.2rem 0 0.9rem; }
@@ -411,7 +404,7 @@ window.initAutocomplete = function() {
     .inp-wrap.has-save select { padding-right: 76px; }
 
     /* Location row */
-    .loc-wrap input { padding-right: 72px !important; }
+    .loc-wrap input { padding-right: 72px; }
     .map-btn { padding: 7px 9px; font-size: 11px; }
 
     /* Paste maps buttons */
@@ -532,9 +525,10 @@ window.initAutocomplete = function() {
       <!-- Location -->
       <div class="field">
         <div class="lbl"><i class="ti ti-map-pin"></i> Location <span class="req">*</span></div>
-        <div class="inp-wrap loc-wrap" id="locationWrap">
-          <input type="text" id="location" placeholder="123 Main St, Edison, NJ" style="padding-right:90px;" oninput="document.getElementById('location').dataset.lat=''; document.getElementById('location').dataset.lng='';" />
-          <button class="field-clear" onclick="window.clearField('location')" tabindex="-1" style="right:56px;">&times;</button>
+        <div class="loc-wrap" id="locationWrap">
+          <gmp-place-autocomplete id="locationPac" placeholder="123 Main St, Edison, NJ"></gmp-place-autocomplete>
+          <input type="hidden" id="location" />
+          <button class="field-clear" onclick="window.clearLocation()" tabindex="-1" style="right:56px;">&times;</button>
           <button class="map-btn" onclick="window.verifyLocation()"><i class="ti ti-map-pin" style="font-size:12px;"></i> Map</button>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;">
@@ -1824,13 +1818,23 @@ window.dispatchInterstate = async function() {
   window.open('https://wa.me/18458524357?text=' + encodeURIComponent(msg), '_blank');
 };
 
+window.clearLocation = function() {
+  var pac = document.getElementById('locationPac');
+  var hidden = document.getElementById('location');
+  if (pac) pac.value = '';
+  if (hidden) { hidden.value = ''; hidden.dataset.lat = ''; hidden.dataset.lng = ''; }
+};
+
 window.verifyLocation = function() {
-  var loc = document.getElementById('location').value;
+  var hidden = document.getElementById('location');
+  var pac = document.getElementById('locationPac');
+  var loc = (hidden && hidden.value) || (pac && pac.value) || '';
   if (loc) window.open('https://maps.google.com/?q=' + encodeURIComponent(loc), '_blank');
 };
 
 window.clearForm = async function() {
-  ['phone','location','callerName','notes','acQuantity','floodEquipment','customNature','customColor','customMake','customModel'].forEach(function(id){
+  window.clearLocation();
+  ['phone','callerName','notes','acQuantity','floodEquipment','customNature','customColor','customMake','customModel'].forEach(function(id){
     var el = document.getElementById(id); if (el) el.value = '';
   });
   window.csReset('nature');
