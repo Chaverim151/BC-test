@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" style="color-scheme: light;">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -83,18 +83,24 @@ window.initAutocomplete = function() {
     box-shadow: 0 0 0 3px rgba(200,165,50,0.16);
     background: #FFFFFF;
   }
-  .loc-wrap gmp-place-autocomplete {
-    flex: 1; min-width: 0;
+  .loc-wrap gmp-place-autocomplete { flex: 1; min-width: 0; width: 100%; }
+  gmp-place-autocomplete {
+    color-scheme: light;
+    --gmp-mat-color-background: #FFFEF5;
+    --gmp-mat-color-on-surface: #1A1400;
   }
-  /* Strip all internal styling from pac element */
-  gmp-place-autocomplete, gmp-place-autocomplete * { box-shadow: none !important; }
   gmp-place-autocomplete::part(input) {
-    border: none !important; outline: none !important;
-    box-shadow: none !important; background: transparent !important;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
     padding: 11px 72px 11px 14px !important;
-    font-size: 14px !important; font-family: inherit !important;
-    color: #1A1400 !important; width: 100% !important;
+    font-size: 16px !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+    color: #1A1400 !important;
+    width: 100% !important;
     border-radius: 10px !important;
+    -webkit-appearance: none !important;
   }
   gmp-place-autocomplete::part(search-icon),
   gmp-place-autocomplete::part(clear-icon) { display: none !important; }
