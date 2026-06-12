@@ -28,6 +28,8 @@ window.initAutocomplete = function() {
         hidden.value = addr;
         hidden.dataset.lat = place.location ? place.location.lat() : '';
         hidden.dataset.lng = place.location ? place.location.lng() : '';
+        if (place.location) window.showAreaIndicator(place.location.lat(), place.location.lng());
+        else { document.getElementById('areaIndicator').style.display = 'none'; }
       } catch(err) { console.warn('place fetch:', err); }
     });
 
@@ -253,6 +255,13 @@ window.initAutocomplete = function() {
   .color-dot { width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.1); }
 
   /* ── Location field — standard inp-wrap, pac element hidden off-screen ── */
+
+  /* ── Area coverage indicator ── */
+  .area-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; letter-spacing: 0.3px; }
+  .area-badge.primary { background: #0A2A0A; border: 1px solid #2E7D32; color: #81C784; }
+  .area-badge.secondary { background: #2A1F00; border: 1px solid #C8A532; color: #FFD54F; }
+  .area-badge.outside { background: #2A0A0A; border: 1px solid #8B2000; color: #EF9A9A; }
+  .area-badge.checking { background: #1A1600; border: 1px solid #3A3010; color: #9A8030; }
 
   /* ── Google Places autocomplete dropdown ── */
   .pac-container {
@@ -536,6 +545,10 @@ window.initAutocomplete = function() {
           <input type="hidden" id="location" />
           <button class="field-clear" onclick="window.clearLocation()" tabindex="-1" style="right:56px;">&times;</button>
           <button class="map-btn" onclick="window.verifyLocation()"><i class="ti ti-map-pin" style="font-size:12px;"></i> Map</button>
+        </div>
+        <!-- Area indicator -->
+        <div id="areaIndicator" style="display:none;margin-top:6px;">
+          <span id="areaBadge" class="area-badge"></span>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;">
           <button class="paste-maps-btn" onclick="window.pasteMapsUrl()" style="margin-top:0;">
@@ -1039,6 +1052,7 @@ window.pasteMapsUrl = async function() {
     document.getElementById('location').value = loc;
     updateMapsLink();
     showToast('\u2713 Coordinates set: ' + loc);
+    window.showAreaIndicator(parseFloat(coords.lat), parseFloat(coords.lng));
   } else if (url.includes('goo.gl') || url.includes('maps.app') || url.includes('maps.google')) {
     document.getElementById('location').value = url;
     updateMapsLink();
@@ -1335,6 +1349,98 @@ window.onColorChange = function() {
   // Update color button dot if custom picker
   if (typeof window.setColor === 'function') window.setColor(color);
 };
+
+// ── Coverage area checker ──
+var coveragePolygons = { primary: [], secondary: [] };
+var coverageLoaded = false;
+
+async function loadCoverageMap() {
+  try {
+    var kmlUrl = 'https://www.google.com/maps/d/kml?mid=1CTAa9fLZi01zzffGhkiMOkkSrN8aPw0&forcekml=1';
+    var proxyUrl = 'https://cobc.shmueleidelman-work.workers.dev/proxy/kml?url=' + encodeURIComponent(kmlUrl);
+    var resp = await fetch(proxyUrl);
+    if (!resp.ok) throw new Error('KML fetch failed');
+    var text = await resp.text();
+    parseKML(text);
+    coverageLoaded = true;
+  } catch(e) {
+    console.warn('Coverage map load failed:', e);
+  }
+}
+
+function parseKML(kmlText) {
+  var parser = new DOMParser();
+  var doc = parser.parseFromString(kmlText, 'text/xml');
+  var placemarks = doc.querySelectorAll('Placemark');
+  placemarks.forEach(function(pm) {
+    var name = (pm.querySelector('name') || {}).textContent || '';
+    var coordsEl = pm.querySelector('coordinates');
+    if (!coordsEl) return;
+    var coords = coordsEl.textContent.trim().split(/\s+/).map(function(c) {
+      var parts = c.split(',');
+      return { lng: parseFloat(parts[0]), lat: parseFloat(parts[1]) };
+    }).filter(function(c) { return !isNaN(c.lat) && !isNaN(c.lng); });
+    if (coords.length < 3) return;
+    var nameLower = name.toLowerCase();
+    if (nameLower.indexOf('primary') !== -1) coveragePolygons.primary.push(coords);
+    else if (nameLower.indexOf('secondary') !== -1) coveragePolygons.secondary.push(coords);
+  });
+}
+
+// Ray-casting point-in-polygon
+function pointInPolygon(lat, lng, polygon) {
+  var inside = false;
+  for (var i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    var xi = polygon[i].lat, yi = polygon[i].lng;
+    var xj = polygon[j].lat, yj = polygon[j].lng;
+    if (((yi > lng) !== (yj > lng)) && (lat < (xj - xi) * (lng - yi) / (yj - yi) + xi)) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function checkCoverageArea(lat, lng) {
+  if (!coverageLoaded) return null;
+  for (var i = 0; i < coveragePolygons.primary.length; i++) {
+    if (pointInPolygon(lat, lng, coveragePolygons.primary[i])) return 'primary';
+  }
+  for (var i = 0; i < coveragePolygons.secondary.length; i++) {
+    if (pointInPolygon(lat, lng, coveragePolygons.secondary[i])) return 'secondary';
+  }
+  return 'outside';
+}
+
+window.showAreaIndicator = function(lat, lng) {
+  var indicator = document.getElementById('areaIndicator');
+  var badge = document.getElementById('areaBadge');
+  if (!indicator || !badge) return;
+
+  if (!coverageLoaded) {
+    badge.className = 'area-badge checking';
+    badge.innerHTML = '<i class="ti ti-loader" style="font-size:13px;"></i> Checking coverage...';
+    indicator.style.display = 'block';
+    // Retry once loaded
+    setTimeout(function() { window.showAreaIndicator(lat, lng); }, 1500);
+    return;
+  }
+
+  var area = checkCoverageArea(lat, lng);
+  indicator.style.display = 'block';
+  if (area === 'primary') {
+    badge.className = 'area-badge primary';
+    badge.innerHTML = '<i class="ti ti-circle-check" style="font-size:14px;"></i> Primary Coverage Area';
+  } else if (area === 'secondary') {
+    badge.className = 'area-badge secondary';
+    badge.innerHTML = '<i class="ti ti-circle-check" style="font-size:14px;"></i> Secondary Coverage Area';
+  } else {
+    badge.className = 'area-badge outside';
+    badge.innerHTML = '<i class="ti ti-alert-circle" style="font-size:14px;"></i> Outside Coverage Area';
+  }
+};
+
+// Start loading coverage map
+loadCoverageMap();
 
 // ── Detect mobile ──
 var isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
@@ -1825,6 +1931,7 @@ window.dispatchInterstate = async function() {
 };
 
 window.clearLocation = function() {
+  var ind = document.getElementById('areaIndicator'); if (ind) ind.style.display = 'none';
   var pac = document.getElementById('locationPac');
   var hidden = document.getElementById('location');
   if (pac) pac.value = '';
