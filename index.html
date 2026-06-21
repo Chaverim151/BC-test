@@ -24,8 +24,21 @@ window.initAutocomplete = function() {
       try {
         var place = e.placePrediction.toPlace();
         await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location'] });
-        var addr = place.formattedAddress || place.displayName || '';
-        hidden.value = addr;
+
+        var name = place.displayName || '';
+        var addr = place.formattedAddress || '';
+
+        // If the place has a real name (e.g. "McDonald's") that isn't just
+        // a restatement of the address, prepend it to the formatted address.
+        var addrStartsWithName = addr && name && addr.toLowerCase().indexOf(name.toLowerCase()) === 0;
+        var finalValue;
+        if (name && addr && !addrStartsWithName) {
+          finalValue = name + ', ' + addr;
+        } else {
+          finalValue = addr || name;
+        }
+
+        hidden.value = finalValue;
         hidden.dataset.lat = place.location ? place.location.lat() : '';
         hidden.dataset.lng = place.location ? place.location.lng() : '';
         if (place.location) window.showAreaIndicator(place.location.lat(), place.location.lng());
@@ -121,7 +134,7 @@ window.initAutocomplete = function() {
   .section-lbl { font-size: 10px; font-weight: 600; color: #8B6E1A; letter-spacing: 2px; text-transform: uppercase; }
 
   /* ── Card ── */
-  .form-card { background: #fff; border-radius: 18px; border: 1px solid #DDD09A; overflow: hidden; box-shadow: 0 4px 24px rgba(180,140,20,0.10); }
+  .form-card { background: #fff; border-radius: 18px; border: 1px solid #DDD09A; overflow: visible; box-shadow: 0 4px 24px rgba(180,140,20,0.10); }
   .card-hdr { background: #0F0E06; padding: 1rem 1.25rem; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #221E08; }
   .card-ttl { color: #C8A532; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
   .card-ttl i { font-size: 18px; }
@@ -512,7 +525,7 @@ window.initAutocomplete = function() {
       <!-- Call # + Phone -->
       <div class="grid2">
         <div>
-          <div class="lbl"><i class="ti ti-hash"></i> Call # <span class="req">*</span></div>
+          <div class="lbl"><i class="ti ti-hash"></i> Call #</div>
           <div class="inp-wrap callnum-wrap">
             <input type="text" id="callNum" placeholder="Loading..." />
             <button class="field-clear" onclick="window.clearField('callNum')" tabindex="-1">&times;</button>
@@ -627,6 +640,26 @@ window.initAutocomplete = function() {
         <button class="chip" onclick="window.selectChip(event,'spare','no_spare_needs_ez','No spare — needs EZ spare')">No spare, needs EZ spare</button>
       </div>
 
+      <!-- EZ Spare lookup (shown when "needs EZ spare" selected) -->
+      <div class="ac-qty" id="ezSpareWrap">
+        <div style="background:#0F0E06;border:1.5px solid #C8A532;border-radius:12px;padding:1rem;margin-bottom:1rem;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <i class="ti ti-wheel" style="color:#C8A532;font-size:18px;"></i>
+              <span style="color:#C8A532;font-size:13px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;">EZ Spare Fitment</span>
+            </div>
+            <button onclick="window.lookupEzSpare()" style="background:#C8A532;border:none;border-radius:7px;padding:5px 12px;color:#0F0E06;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">
+              <i class="ti ti-refresh" style="font-size:12px;"></i> Refresh
+            </button>
+          </div>
+
+          <!-- Results -->
+          <div id="ezSpareResult" style="color:#9A8030;font-size:13px;font-style:italic;">
+            Enter Year, Make &amp; Model above to look up EZ Spare fitment.
+          </div>
+        </div>
+      </div>
+
       <!-- Lockout: vehicle or house -->
       <div class="lockout-type" id="lockoutType">
         <div class="lbl" style="width:100%;margin-bottom:4px;"><i class="ti ti-key"></i> Lockout type</div>
@@ -715,7 +748,16 @@ window.initAutocomplete = function() {
             <input type="text" id="customModel" placeholder="Enter model..." style="font-size:14px;" />
           </div>
         </div>
-      </div>
+
+        <!-- Trim — shown when EZ Spare lookup has multiple options -->
+        <div class="field" id="trimField" style="display:none;">
+          <div class="lbl"><i class="ti ti-list-details"></i> Trim</div>
+          <div class="inp-wrap">
+            <select id="ezSpareTrimSelect" onchange="window.onEzSpareTrimChange()">
+              <option value="">— Select trim —</option>
+            </select>
+          </div>
+        </div>
 
       <!-- Additional notes -->
       <div class="field">
@@ -867,9 +909,10 @@ async function pollTelzioLiveCalls() {
     if (inbound.length > 0) {
       var call = inbound[0];
       var from = call.From || '';
-      // Format: +12015551234 → (201) 555-1234
+      var callerName = call.CallerName || call.caller_name || call.FromName || '';
       var formatted = formatPhone(from);
       lastLiveCallFrom = formatted;
+      window.lastLiveCallerName = callerName;
 
       statusEl.textContent = 'Live call';
       statusEl.className = 'telzio-status live';
@@ -877,14 +920,28 @@ async function pollTelzioLiveCalls() {
       // Only show banner if phone field is empty or different
       var currentPhone = document.getElementById('phone').value.trim();
       if (currentPhone !== formatted) {
-        numEl.textContent = formatted;
+        numEl.innerHTML = formatted + (callerName ? ' &nbsp;<span style="opacity:0.7;font-size:12px;">· ' + callerName + '</span>' : '');
         banner.style.display = 'flex';
+      }
+
+      // Suggest caller name if the field is empty
+      var nameEl = document.getElementById('callerName');
+      if (callerName && nameEl && !nameEl.value.trim()) {
+        nameEl.placeholder = callerName + ' (from caller ID)';
+        nameEl.dataset.callerIdSuggestion = callerName;
       }
     } else {
       lastLiveCallFrom = null;
+      window.lastLiveCallerName = '';
       statusEl.textContent = '';
       statusEl.className = 'telzio-status';
       banner.style.display = 'none';
+      // Clear caller ID suggestion if field still empty
+      var nameEl = document.getElementById('callerName');
+      if (nameEl && !nameEl.value.trim()) {
+        nameEl.placeholder = 'John Doe';
+        delete nameEl.dataset.callerIdSuggestion;
+      }
     }
   } catch(e) {
     // Silently fail — don't disrupt dispatch
@@ -1351,43 +1408,43 @@ window.onColorChange = function() {
 };
 
 // ── Coverage area checker ──
-var coveragePolygons = { primary: [], secondary: [] };
+// ── Coverage area checker — uses actual map polygons from Google My Maps ──
 var coverageLoaded = false;
+var coveragePolygons = { primary: [], secondary: [] };
 
 async function loadCoverageMap() {
   try {
     var kmlUrl = 'https://www.google.com/maps/d/kml?mid=1CTAa9fLZi01zzffGhkiMOkkSrN8aPw0&forcekml=1';
     var proxyUrl = 'https://cobc.shmueleidelman-work.workers.dev/proxy/kml?url=' + encodeURIComponent(kmlUrl);
     var resp = await fetch(proxyUrl);
-    if (!resp.ok) throw new Error('KML fetch failed');
+    if (!resp.ok) throw new Error('KML ' + resp.status);
     var text = await resp.text();
     parseKML(text);
-    coverageLoaded = true;
+    console.log('Coverage zones loaded — primary:', coveragePolygons.primary.length, 'secondary:', coveragePolygons.secondary.length);
   } catch(e) {
-    console.warn('Coverage map load failed:', e);
+    console.warn('Coverage map load failed:', e.message);
   }
+  coverageLoaded = true;
 }
 
 function parseKML(kmlText) {
   var parser = new DOMParser();
   var doc = parser.parseFromString(kmlText, 'text/xml');
-  var placemarks = doc.querySelectorAll('Placemark');
-  placemarks.forEach(function(pm) {
-    var name = (pm.querySelector('name') || {}).textContent || '';
-    var coordsEl = pm.querySelector('coordinates');
-    if (!coordsEl) return;
-    var coords = coordsEl.textContent.trim().split(/\s+/).map(function(c) {
-      var parts = c.split(',');
-      return { lng: parseFloat(parts[0]), lat: parseFloat(parts[1]) };
-    }).filter(function(c) { return !isNaN(c.lat) && !isNaN(c.lng); });
-    if (coords.length < 3) return;
-    var nameLower = name.toLowerCase();
-    if (nameLower.indexOf('primary') !== -1) coveragePolygons.primary.push(coords);
-    else if (nameLower.indexOf('secondary') !== -1) coveragePolygons.secondary.push(coords);
+  doc.querySelectorAll('Placemark').forEach(function(pm) {
+    var name = ((pm.querySelector('name') || {}).textContent || '').toLowerCase();
+    pm.querySelectorAll('coordinates').forEach(function(coordsEl) {
+      var coords = coordsEl.textContent.trim().split(/\s+/).map(function(c) {
+        var p = c.split(',');
+        return { lat: parseFloat(p[1]), lng: parseFloat(p[0]) };
+      }).filter(function(c) { return !isNaN(c.lat) && !isNaN(c.lng); });
+      if (coords.length < 3) return;
+      if (name.indexOf('primary') !== -1) coveragePolygons.primary.push(coords);
+      else if (name.indexOf('secondary') !== -1) coveragePolygons.secondary.push(coords);
+    });
   });
 }
 
-// Ray-casting point-in-polygon
+// Ray-casting point-in-polygon algorithm
 function pointInPolygon(lat, lng, polygon) {
   var inside = false;
   for (var i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
@@ -1401,7 +1458,6 @@ function pointInPolygon(lat, lng, polygon) {
 }
 
 function checkCoverageArea(lat, lng) {
-  if (!coverageLoaded) return null;
   for (var i = 0; i < coveragePolygons.primary.length; i++) {
     if (pointInPolygon(lat, lng, coveragePolygons.primary[i])) return 'primary';
   }
@@ -1411,22 +1467,22 @@ function checkCoverageArea(lat, lng) {
   return 'outside';
 }
 
-window.showAreaIndicator = function(lat, lng) {
+window.showAreaIndicator = async function(lat, lng) {
   var indicator = document.getElementById('areaIndicator');
   var badge = document.getElementById('areaBadge');
   if (!indicator || !badge) return;
+  indicator.style.display = 'block';
+  badge.className = 'area-badge checking';
+  badge.innerHTML = '<i class="ti ti-loader" style="font-size:13px;"></i> Checking coverage...';
 
-  if (!coverageLoaded) {
-    badge.className = 'area-badge checking';
-    badge.innerHTML = '<i class="ti ti-loader" style="font-size:13px;"></i> Checking coverage...';
-    indicator.style.display = 'block';
-    // Retry once loaded
-    setTimeout(function() { window.showAreaIndicator(lat, lng); }, 1500);
-    return;
+  // Wait up to 5s for KML to load
+  var waited = 0;
+  while (!coverageLoaded && waited < 5000) {
+    await new Promise(function(r){ setTimeout(r, 200); });
+    waited += 200;
   }
 
   var area = checkCoverageArea(lat, lng);
-  indicator.style.display = 'block';
   if (area === 'primary') {
     badge.className = 'area-badge primary';
     badge.innerHTML = '<i class="ti ti-circle-check" style="font-size:14px;"></i> Primary Coverage Area';
@@ -1439,7 +1495,6 @@ window.showAreaIndicator = function(lat, lng) {
   }
 };
 
-// Start loading coverage map
 loadCoverageMap();
 
 // ── Detect mobile ──
@@ -1666,6 +1721,10 @@ window.onNatureChange = function() {
   var showTire = val === 'flat_tire';
   document.getElementById('tireOpts').style.display = showTire ? 'flex' : '';
   document.getElementById('tireOpts').classList.toggle('on', showTire);
+  if (!showTire) {
+    document.getElementById('ezSpareWrap').classList.remove('on');
+    window.ezSpareData = null;
+  }
 
   // Lockout type chips
   var showLock = val === 'lockout';
@@ -1745,7 +1804,18 @@ window.selectChip = function(evt, group, id, label) {
   parent.querySelectorAll('.chip').forEach(function(c){ c.classList.remove('selected'); });
   evt.target.classList.add('selected');
 
-  // Lockout type: show/hide vehicle fields and house side chips
+  // EZ spare: show lookup panel + auto-trigger
+  if (group === 'spare') {
+    var ezWrap = document.getElementById('ezSpareWrap');
+    if (id === 'no_spare_needs_ez') {
+      ezWrap.classList.add('on');
+      window.lookupEzSpare();
+    } else {
+      ezWrap.classList.remove('on');
+      window.ezSpareData = null;
+      var tf = document.getElementById('trimField'); if (tf) tf.style.display = 'none';
+    }
+  }
   if (group === 'lockout_type') {
     var isVehicle = (id === 'vehicle_lockout');
     var isHouse   = (id === 'house_lockout');
@@ -1790,12 +1860,10 @@ function buildNatureString() {
   var parts = [label];
 
   if (val === 'flat_tire' && window.chips['spare']) parts.push(window.chips['spare'].label);
+
   if (val === 'lockout') {
     var ltype = window.chips['lockout_type'];
-    if (ltype) {
-      // Replace the generic "Lockout" label with specific label
-      parts[0] = ltype.id === 'vehicle_lockout' ? 'Car Lockout' : 'House Lockout';
-    }
+    if (ltype) parts[0] = ltype.id === 'vehicle_lockout' ? 'Car Lockout' : 'House Lockout';
     if (window.chips['house_side']) parts.push(window.chips['house_side'].label);
   }
   if (val === 'flood') {
@@ -1817,12 +1885,30 @@ function buildNatureString() {
     var modelEl = document.getElementById('vModel');
     var model = modelEl ? modelEl.value.trim() : '';
     if (model === 'Other') model = (document.getElementById('customModel') ? document.getElementById('customModel').value.trim() : '') || 'Other';
-    var veh = [yr, col, make, model].filter(Boolean).join(' ');
+    // Include trim if set
+    var trimEl = document.getElementById('ezSpareTrimSelect');
+    var trim = (trimEl && document.getElementById('trimField') && document.getElementById('trimField').style.display !== 'none') ? trimEl.options[trimEl.selectedIndex] && trimEl.options[trimEl.selectedIndex].text : '';
+    if (trim === '— Select trim —') trim = '';
+    var veh = [col, yr, make, model, trim].filter(Boolean).join(' ');
     if (veh) parts.push(veh);
   }
   var notes = document.getElementById('notes').value.trim();
   if (notes) parts.push(notes);
   return parts.filter(Boolean).join(' | ');
+}
+
+function buildEzSpareLines() {
+  if (!window.ezSpareData) return [];
+  var s = window.ezSpareData;
+  var lines = [];
+  lines.push('');
+  lines.push('*EZ Spare Info*');
+  if (s.size_1) lines.push('Preferred: ' + s.size_1 + (s.kit ? ' (' + s.kit + ')' : ''));
+  if (s.size_2) lines.push('Secondary: ' + s.size_2);
+  if (s.efs_adapter) lines.push('Adapter: ' + s.efs_adapter + (s.pattern ? ' — ' + s.pattern : '') + (s.efs_pn ? ' (' + s.efs_pn + ')' : ''));
+  if (s.lug_thread) lines.push((s.lug_type || 'Lug Nut') + ': ' + s.lug_thread + (s.lug_pn ? ' (' + s.lug_pn + ')' : ''));
+  if (s.hub_ring) lines.push('Hub Ring: ' + s.hub_ring + (s.hub_ring_pn ? ' (' + s.hub_ring_pn + ')' : ''));
+  return lines;
 }
 
 function getFormData() {
@@ -1873,6 +1959,7 @@ function buildWA(d) {
   lines.push('Name:' + d.name);
   lines.push('');
   lines.push('Nature:' + d.nature);
+  buildEzSpareLines().forEach(function(l){ lines.push(l); });
   lines.push('');
   lines.push('https://form.jotform.com/212776438913868');
   lines.push('');
@@ -1897,6 +1984,7 @@ function buildInt(d) {
   lines.push('Name: ' + d.name);
   lines.push('');
   lines.push('Nature: ' + d.nature);
+  buildEzSpareLines().forEach(function(l){ lines.push(l); });
   return lines.join('\n');
 }
 
@@ -1908,7 +1996,6 @@ function showPreview(txt) {
 window.dispatchWhatsApp = async function() {
   var d = getFormData();
   if (!d.urgent) {
-    if (!d.callNum) { alert('Please enter a Call #.'); return; }
     if (!d.location) { alert('Please enter a Location.'); return; }
     if (!d.nature) { alert('Please select a Nature of Call.'); return; }
   }
@@ -1961,6 +2048,9 @@ window.clearForm = async function() {
   window.chips = {};
   document.getElementById('urgentBar').classList.remove('active');
   document.getElementById('vehicleFields').classList.remove('on');
+  document.getElementById('ezSpareWrap').classList.remove('on');
+  window.ezSpareData = null;
+  var tf = document.getElementById('trimField'); if (tf) tf.style.display = 'none';
   document.getElementById('tireOpts').classList.remove('on');
   document.getElementById('houseLockSide').style.display = '';
   document.getElementById('houseLockSide').classList.remove('on');
@@ -1980,6 +2070,187 @@ window.clearForm = async function() {
     const last = snap.exists() ? snap.val() : 1000;
     document.getElementById('callNum').value = last + 1;
   } catch(e) { document.getElementById('callNum').value = ''; }
+};
+
+// ══════════════════════════════════════════════
+// ── EZ Spare Fitment Lookup ──
+// ══════════════════════════════════════════════
+const EZ_SPARE_BASE = 'https://ezspare.shmueleidelman-work.workers.dev';
+window.ezSpareData = null; // stores current spec for dispatch message
+
+async function ezFetch(endpoint, year, make, model, option) {
+  try {
+    var params = new URLSearchParams({ year: year||'', make: make||'', model: model||'', option: option||'', undefined: '' });
+    var resp = await fetch(EZ_SPARE_BASE + endpoint + '?' + params.toString());
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    return await resp.json();
+  } catch(e) {
+    console.warn('EZ Spare fetch error:', e);
+    return null;
+  }
+}
+
+function getVehicleFields() {
+  var year  = (document.getElementById('vYear')  || {}).value || '';
+  var make  = (document.getElementById('vMake')  || {}).value || '';
+  var model = (document.getElementById('vModel') || {}).value || '';
+  // Fallback: vYear may be a select now
+  var yearEl = document.getElementById('vYear');
+  if (yearEl && yearEl.tagName === 'SELECT') year = yearEl.value;
+  return { year: year.trim(), make: make.trim(), model: model.trim() };
+}
+
+window.lookupEzSpare = async function() {
+  var v = getVehicleFields();
+  var result = document.getElementById('ezSpareResult');
+  var trimField = document.getElementById('trimField');
+  var trimSel = document.getElementById('ezSpareTrimSelect');
+  window.ezSpareData = null;
+
+  if (!v.year || !v.make || !v.model) {
+    result.innerHTML = '<span style="color:#9A8030;">Enter Year, Make &amp; Model above to look up EZ Spare fitment.</span>';
+    if (trimField) trimField.style.display = 'none';
+    return;
+  }
+
+  result.innerHTML = '<span style="color:#C8A532;"><i class="ti ti-loader" style="animation:spin 0.8s linear infinite;display:inline-block;margin-right:4px;"></i> Looking up fitment...</span>';
+  if (trimField) trimField.style.display = 'none';
+
+  var options = await ezFetch('/api/get-options', v.year, v.make, v.model);
+  if (!options) {
+    result.innerHTML = '<span style="color:#E05000;">Could not reach EZ Spare database.</span>';
+    return;
+  }
+
+  var optArr = extractEzArray(options);
+
+  if (optArr.length === 0) {
+    result.innerHTML = '<span style="color:#E05000;">No fitment data found for ' + v.year + ' ' + v.make + ' ' + v.model + '.</span>';
+    return;
+  }
+
+  if (optArr.length === 1) {
+    var onlyVal = optArr[0].value || optArr[0].name || String(optArr[0]);
+    if (trimField) trimField.style.display = 'none';
+    await fetchAndRenderEzSpec(v.year, v.make, v.model, onlyVal);
+  } else {
+    // Multiple trims — show trim field in vehicle info
+    trimSel.innerHTML = '<option value="">— Select trim —</option>';
+    optArr.forEach(function(item) {
+      var val = item.value || item.name || String(item);
+      var txt = item.name || item.text || String(item);
+      var opt = document.createElement('option');
+      opt.value = val; opt.textContent = txt;
+      trimSel.appendChild(opt);
+    });
+    if (trimField) trimField.style.display = 'block';
+    // Auto-select first trim
+    trimSel.selectedIndex = 1;
+    var firstVal = optArr[0].value || optArr[0].name || String(optArr[0]);
+    await fetchAndRenderEzSpec(v.year, v.make, v.model, firstVal);
+  }
+};
+
+window.onEzSpareTrimChange = async function() {
+  var v = getVehicleFields();
+  var trimVal = document.getElementById('ezSpareTrimSelect').value;
+  if (!trimVal) return;
+  await fetchAndRenderEzSpec(v.year, v.make, v.model, trimVal);
+};
+
+async function fetchAndRenderEzSpec(year, make, model, option) {
+  var result = document.getElementById('ezSpareResult');
+  result.innerHTML = '<span style="color:#C8A532;"><i class="ti ti-loader" style="animation:spin 0.8s linear infinite;display:inline-block;margin-right:4px;"></i> Loading specs...</span>';
+
+  var data = await ezFetch('/api/get-info', year, make, model, option);
+  if (!data) {
+    result.innerHTML = '<span style="color:#E05000;">Could not load specs for this trim.</span>';
+    return;
+  }
+
+  var spec = Array.isArray(data) ? data[0] : data;
+  window.ezSpareData = spec;
+
+  var dotColor = getEzHubColor(spec.hub_ring || '', spec.hub_ring_pn || '');
+
+  result.innerHTML =
+    '<div style="display:grid;gap:6px;">' +
+      '<div style="color:#E8D98A;font-size:13px;"><span style="color:#9A8030;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">Preferred Size</span><br><strong>' + (spec.size_1 || 'N/A') + '</strong>' + (spec.kit ? ' <span style="color:#9A8030;font-size:11px;">('+spec.kit+')</span>' : '') + '</div>' +
+      '<div style="color:#E8D98A;font-size:13px;"><span style="color:#9A8030;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">Secondary Size</span><br><strong>' + (spec.size_2 || 'N/A') + '</strong></div>' +
+      '<div style="color:#E8D98A;font-size:13px;"><span style="color:#9A8030;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">EFS Adapter</span><br><strong>' + (spec.efs_adapter || 'Direct Fit') + ' — ' + (spec.pattern || '') + '</strong>' + (spec.efs_pn ? ' <span style="color:#9A8030;font-size:11px;">('+spec.efs_pn+')</span>' : '') + '</div>' +
+      '<div style="color:#E8D98A;font-size:13px;"><span style="color:#9A8030;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">' + (spec.lug_type || 'Lug Nut') + '</span><br><strong>' + (spec.lug_thread || 'N/A') + '</strong>' + (spec.lug_pn ? ' <span style="color:#9A8030;font-size:11px;">('+spec.lug_pn+')</span>' : '') + '</div>' +
+      '<div style="color:#E8D98A;font-size:13px;"><span style="color:#9A8030;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">Hub Ring</span><br>' +
+        '<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:' + dotColor + ';border:1px solid rgba(255,255,255,0.2);margin-right:6px;vertical-align:middle;"></span>' +
+        '<strong>' + (spec.hub_ring || 'Direct Fit') + '</strong>' + (spec.hub_ring_pn ? ' <span style="color:#9A8030;font-size:11px;">('+spec.hub_ring_pn+')</span>' : '') +
+      '</div>' +
+    '</div>';
+}
+
+function extractEzArray(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === 'object') {
+    var keys = ['makes','models','trims','options','data','result','values'];
+    for (var i = 0; i < keys.length; i++) {
+      if (raw[keys[i]] && Array.isArray(raw[keys[i]])) return raw[keys[i]];
+    }
+    return Object.keys(raw).map(function(k){ return { value: k, name: k }; });
+  }
+  return [];
+}
+
+function getEzHubColor(hubRingText, partNumber) {
+  var text = (hubRingText + ' ' + partNumber).toUpperCase();
+  if (text.includes('DIRECT') || text.includes('NO RING')) return 'transparent';
+  if (text.includes('54.1')) return '#424242';
+  if (text.includes('56.1')) return '#1d4e89';
+  if (text.includes('56.6')) return '#383838';
+  if (text.includes('57.1')) return '#f3a1a6';
+  if (text.includes('58.1')) return '#d75431';
+  if (text.includes('60.1')) return '#22558a';
+  if (text.includes('63.4')) return '#5c4013';
+  if (text.includes('64.1')) return '#163882';
+  if (text.includes('65.1')) return '#000000';
+  if (text.includes('66.1')) return '#9d85be';
+  if (text.includes('66.6')) return '#856128';
+  if (text.includes('67.1')) return '#c3412f';
+  if (text.includes('70.1')) return '#b2b5b9';
+  return '#b2b5b9';
+}
+
+// ── Auto re-query EZ spare when vehicle fields change ──
+function maybeRefreshEzSpare() {
+  if (window.chips['spare'] && window.chips['spare'].id === 'no_spare_needs_ez') {
+    window.lookupEzSpare();
+  }
+}
+
+// Hook into make/model change handlers
+var _origOnMakeChange = window.onMakeChange;
+window.onMakeChange = function() {
+  _origOnMakeChange && _origOnMakeChange();
+  maybeRefreshEzSpare();
+};
+
+var _origOnMakeInput = window.onMakeInput;
+window.onMakeInput = function() {
+  _origOnMakeInput && _origOnMakeInput();
+  maybeRefreshEzSpare();
+};
+
+// Year field — works for both select and text input
+document.addEventListener('change', function(e) {
+  if (e.target && e.target.id === 'vYear') maybeRefreshEzSpare();
+});
+document.addEventListener('input', function(e) {
+  if (e.target && e.target.id === 'vYear') maybeRefreshEzSpare();
+});
+
+// Model field
+var _origOnModelChange = window.onModelChange;
+window.onModelChange = function() {
+  _origOnModelChange && _origOnModelChange();
+  maybeRefreshEzSpare();
 };
 
 // ── Init ──
