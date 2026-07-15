@@ -9,55 +9,37 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css" />
 <script>
 window.initAutocomplete = function() {
-  try {
-    var pac = document.getElementById('locationPac');
-    var hidden = document.getElementById('location');
-    if (!pac || !hidden) return;
-
-    // Bias results to Bergen County, NJ
-    var bergenCenter = new google.maps.LatLng(40.9584, -74.0742);
-    var circle = new google.maps.Circle({ center: bergenCenter, radius: 20000 });
-    pac.bounds = circle.getBounds();
-    pac.strictBounds = false; // bias not restrict
-
-    pac.addEventListener('gmp-placeselect', async function(e) {
-      try {
-        var place = e.placePrediction.toPlace();
-        await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location'] });
-
-        var name = place.displayName || '';
-        var addr = place.formattedAddress || '';
-
-        // If the place has a real name (e.g. "McDonald's") that isn't just
-        // a restatement of the address, prepend it to the formatted address.
-        var addrStartsWithName = addr && name && addr.toLowerCase().indexOf(name.toLowerCase()) === 0;
-        var finalValue;
-        if (name && addr && !addrStartsWithName) {
-          finalValue = name + ', ' + addr;
-        } else {
-          finalValue = addr || name;
-        }
-
-        hidden.value = finalValue;
-        hidden.dataset.lat = place.location ? place.location.lat() : '';
-        hidden.dataset.lng = place.location ? place.location.lng() : '';
-        if (place.location) window.showAreaIndicator(place.location.lat(), place.location.lng());
-        else { document.getElementById('areaIndicator').style.display = 'none'; }
-      } catch(err) { console.warn('place fetch:', err); }
-    });
-
-    // Also sync typed text to hidden input for dispatch
-    pac.addEventListener('input', function(e) {
-      hidden.value = e.target.value || pac.value || '';
-      hidden.dataset.lat = '';
-      hidden.dataset.lng = '';
-    });
-
-    console.log('Autocomplete ready');
-  } catch(e) { console.error('Maps init error:', e); }
+  var input = document.getElementById('location');
+  if (!input || !window.google || !window.google.maps || !window.google.maps.places) return;
+  if (!window.google.maps.places.Autocomplete) {
+    console.warn('google.maps.places.Autocomplete not available — API key may need Places API enabled');
+    return;
+  }
+  var ac = new google.maps.places.Autocomplete(input, {
+    fields: ['formatted_address', 'geometry', 'name']
+  });
+  ac.addListener('place_changed', function() {
+    var place = ac.getPlace();
+    if (!place || !place.geometry) return;
+    var name = place.name || '';
+    var addr = place.formatted_address || '';
+    var addrStartsWithName = addr && name && addr.toLowerCase().indexOf(name.toLowerCase()) === 0;
+    input.value = (name && addr && !addrStartsWithName) ? name + ', ' + addr : (addr || name);
+    window._locationLat = place.geometry.location.lat();
+    window._locationLng = place.geometry.location.lng();
+    input.dataset.lat = window._locationLat;
+    input.dataset.lng = window._locationLng;
+    if (window.showAreaIndicator) window.showAreaIndicator(window._locationLat, window._locationLng);
+  });
+  input.addEventListener('input', function() {
+    window._locationLat = null;
+    window._locationLng = null;
+    input.dataset.lat = '';
+    input.dataset.lng = '';
+  });
 };
 </script>
-<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAFAsM0xqmKrnirTKIH9If2s4GuDpmO6BQ&libraries=places&v=beta&callback=initAutocomplete" async defer></script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAFAsM0xqmKrnirTKIH9If2s4GuDpmO6BQ&libraries=places&v=weekly&callback=initAutocomplete" async defer></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F2ECD8; min-height: 100vh; -webkit-text-size-adjust: 100%; }
@@ -85,40 +67,8 @@ window.initAutocomplete = function() {
   .use-call-btn:hover { background: #388E3C; }
 
   /* ── Location field ── */
-  .loc-wrap {
-    position: relative;
-    display: flex; align-items: center;
-    border: 1.5px solid #E0CC80;
-    border-radius: 10px;
-    background: #FFFEF5;
-    transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
-  }
-  .loc-wrap:focus-within {
-    border-color: #C8A532;
-    box-shadow: 0 0 0 3px rgba(200,165,50,0.16);
-    background: #FFFFFF;
-  }
-  .loc-wrap gmp-place-autocomplete { flex: 1; min-width: 0; width: 100%; }
-  gmp-place-autocomplete {
-    color-scheme: light;
-    --gmp-mat-color-background: #FFFEF5;
-    --gmp-mat-color-on-surface: #1A1400;
-  }
-  gmp-place-autocomplete::part(input) {
-    border: none !important;
-    outline: none !important;
-    box-shadow: none !important;
-    background: transparent !important;
-    padding: 11px 72px 11px 14px !important;
-    font-size: 16px !important;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
-    color: #1A1400 !important;
-    width: 100% !important;
-    border-radius: 10px !important;
-    -webkit-appearance: none !important;
-  }
-  gmp-place-autocomplete::part(search-icon),
-  gmp-place-autocomplete::part(clear-icon) { display: none !important; }
+  .loc-wrap { position: relative; }
+  .loc-wrap input { padding-right: 72px; }
   .map-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: #0F0E06; border: none; border-radius: 7px; padding: 6px 10px; color: #C8A532; font-size: 11px; cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 3px; white-space: nowrap; font-weight: 600; z-index: 1; }
   .map-btn:hover { background: #1E1C08; }
   .beta-tag { display: inline-block; background: #C8A532; color: #0F0E06; font-size: 9px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; vertical-align: middle; margin-left: 6px; position: relative; top: -2px; }
@@ -128,17 +78,17 @@ window.initAutocomplete = function() {
   @keyframes spin { to { transform: rotate(360deg); } }
 
   /* ── Page ── */
-  .page { max-width: 680px; margin: 0 auto; padding: 1.5rem 1.25rem 3rem; }
+  .page { max-width: 680px; margin: 0 auto; padding: 1.5rem 1.25rem 5rem; }
   .section-row { display: flex; align-items: center; gap: 8px; margin-bottom: 1rem; }
   .dot { width: 7px; height: 7px; border-radius: 50%; background: #C8A532; }
   .section-lbl { font-size: 10px; font-weight: 600; color: #8B6E1A; letter-spacing: 2px; text-transform: uppercase; }
 
   /* ── Card ── */
-  .form-card { background: #fff; border-radius: 18px; border: 1px solid #DDD09A; overflow: visible; box-shadow: 0 4px 24px rgba(180,140,20,0.10); }
-  .card-hdr { background: #0F0E06; padding: 1rem 1.25rem; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #221E08; }
+  .form-card { background: #FDFBF0; border-radius: 18px; border: 1px solid #DDD09A; overflow: visible; box-shadow: 0 4px 24px rgba(180,140,20,0.10); }
+  .card-hdr { background: #0F0E06; padding: 1rem 1.25rem; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #221E08; border-radius: 17px 17px 0 0; }
   .card-ttl { color: #C8A532; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
   .card-ttl i { font-size: 18px; }
-  .card-body { padding: 1.4rem 1.4rem 1.25rem; background: #FDFBF0; }
+  .card-body { padding: 1.4rem 1.4rem 2rem; background: #FDFBF0; border-radius: 0 0 17px 17px; }
 
   /* ── Call number badge ── */
   .callnum-wrap { position: relative; }
@@ -411,9 +361,12 @@ window.initAutocomplete = function() {
     .brand-tag { font-size: 10px; }
 
     /* Card */
-    .card-hdr { padding: 0.75rem 1rem; }
+    .card-hdr { padding: 0.75rem 1rem; border-radius: 17px 17px 0 0; }
     .card-ttl { font-size: 13px; }
-    .card-body { padding: 1rem; }
+    .card-body { padding: 1rem 1rem 1.75rem; border-radius: 0 0 17px 17px; }
+
+    /* Page bottom */
+    .page { padding: 0.75rem 0.6rem 4rem; }
 
     /* Grids → single column */
     .grid2, .grid3 { grid-template-columns: 1fr; gap: 0; }
@@ -553,9 +506,8 @@ window.initAutocomplete = function() {
       <!-- Location -->
       <div class="field">
         <div class="lbl"><i class="ti ti-map-pin"></i> Location <span class="req">*</span></div>
-        <div class="loc-wrap" id="locationWrap">
-          <gmp-place-autocomplete id="locationPac" placeholder="123 Main St, Edison, NJ"></gmp-place-autocomplete>
-          <input type="hidden" id="location" />
+        <div class="inp-wrap loc-wrap" id="locationWrap">
+          <input type="text" id="location" placeholder="123 Main St, Edison, NJ" oninput="window._locationLat=null;window._locationLng=null;this.dataset.lat='';this.dataset.lng='';" />
           <button class="field-clear" onclick="window.clearLocation()" tabindex="-1" style="right:56px;">&times;</button>
           <button class="map-btn" onclick="window.verifyLocation()"><i class="ti ti-map-pin" style="font-size:12px;"></i> Map</button>
         </div>
@@ -579,6 +531,12 @@ window.initAutocomplete = function() {
         <div class="inp-wrap">
           <input type="text" id="callerName" placeholder="John Doe" />
           <button class="field-clear" onclick="window.clearField('callerName')" tabindex="-1">&times;</button>
+        </div>
+        <div id="callerIdSuggestion" style="display:none;margin-top:5px;">
+          <button onclick="window.acceptCallerIdName()" style="display:flex;align-items:center;gap:6px;background:transparent;border:1.5px dashed #C8A532;border-radius:8px;padding:5px 12px;color:#8B6E1A;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all 0.15s;">
+            <i class="ti ti-id-badge" style="font-size:13px;color:#C8A532;"></i>
+            <span>Use caller ID: <strong id="callerIdName" style="color:#1A1400;"></strong></span>
+          </button>
         </div>
       </div>
 
@@ -782,8 +740,9 @@ window.initAutocomplete = function() {
     <div class="preview-txt" id="previewText"></div>
   </div>
 </div>
+</div>
 
-<!-- Locked inside modal -->
+<!-- end .page -->
 <div class="modal-overlay" id="trappedModal">
   <div class="modal">
     <div class="modal-hdr">
@@ -927,8 +886,14 @@ async function pollTelzioLiveCalls() {
       // Suggest caller name if the field is empty
       var nameEl = document.getElementById('callerName');
       if (callerName && nameEl && !nameEl.value.trim()) {
-        nameEl.placeholder = callerName + ' (from caller ID)';
-        nameEl.dataset.callerIdSuggestion = callerName;
+        nameEl.placeholder = 'John Doe';
+        var suggEl = document.getElementById('callerIdSuggestion');
+        var suggName = document.getElementById('callerIdName');
+        if (suggEl && suggName) {
+          suggName.textContent = callerName;
+          suggEl.style.display = 'block';
+          nameEl.dataset.callerIdSuggestion = callerName;
+        }
       }
     } else {
       lastLiveCallFrom = null;
@@ -938,9 +903,11 @@ async function pollTelzioLiveCalls() {
       banner.style.display = 'none';
       // Clear caller ID suggestion if field still empty
       var nameEl = document.getElementById('callerName');
+      var suggEl = document.getElementById('callerIdSuggestion');
       if (nameEl && !nameEl.value.trim()) {
         nameEl.placeholder = 'John Doe';
         delete nameEl.dataset.callerIdSuggestion;
+        if (suggEl) suggEl.style.display = 'none';
       }
     }
   } catch(e) {
@@ -994,11 +961,32 @@ window.pullLastCall = async function() {
   }
 };
 
+window.acceptCallerIdName = function() {
+  var nameEl = document.getElementById('callerName');
+  var suggEl = document.getElementById('callerIdSuggestion');
+  var name = nameEl && nameEl.dataset.callerIdSuggestion;
+  if (name) {
+    nameEl.value = name;
+    delete nameEl.dataset.callerIdSuggestion;
+  }
+  if (suggEl) suggEl.style.display = 'none';
+  showToast('\u2713 Caller name filled from caller ID');
+};
+
 window.fillFromLiveCall = function() {
   if (lastLiveCallFrom) {
     document.getElementById('phone').value = lastLiveCallFrom;
     document.getElementById('liveCallBanner').style.display = 'none';
-    showToast('\u2713 Phone filled from live call');
+    // Also fill caller name if available and field is empty
+    var nameEl = document.getElementById('callerName');
+    if (nameEl && !nameEl.value.trim() && window.lastLiveCallerName) {
+      nameEl.value = window.lastLiveCallerName;
+      nameEl.placeholder = 'John Doe';
+      delete nameEl.dataset.callerIdSuggestion;
+      showToast('\u2713 Phone + name filled from live call');
+    } else {
+      showToast('\u2713 Phone filled from live call');
+    }
   }
 };
 
@@ -1106,12 +1094,20 @@ window.pasteMapsUrl = async function() {
 
   if (coords) {
     var loc = coords.lat + ', ' + coords.lng;
-    document.getElementById('location').value = loc;
+    var hidden = document.getElementById('location');
+    hidden.value = loc;
+    hidden.dataset.lat = coords.lat;
+    hidden.dataset.lng = coords.lng;
+    window._locationLat = parseFloat(coords.lat);
+    window._locationLng = parseFloat(coords.lng);
     updateMapsLink();
     showToast('\u2713 Coordinates set: ' + loc);
     window.showAreaIndicator(parseFloat(coords.lat), parseFloat(coords.lng));
   } else if (url.includes('goo.gl') || url.includes('maps.app') || url.includes('maps.google')) {
-    document.getElementById('location').value = url;
+    var hidden = document.getElementById('location');
+    hidden.value = url;
+    hidden.dataset.lat = '';
+    hidden.dataset.lng = '';
     updateMapsLink();
     showToast('Link pasted as location');
   } else {
@@ -1897,6 +1893,26 @@ function buildNatureString() {
   return parts.filter(Boolean).join(' | ');
 }
 
+function getHubRingColorName(hubRingText, partNumber) {
+  var text = (hubRingText + ' ' + partNumber).toUpperCase();
+  if (text.includes('DIRECT') || text.includes('NO RING')) return '';
+  if (text.includes('54.1')) return 'Dark Grey';
+  if (text.includes('56.1')) return 'Ocean Blue';
+  if (text.includes('56.6')) return 'Charcoal Grey';
+  if (text.includes('57.1')) return 'Light Pink';
+  if (text.includes('58.1')) return 'Burnt Orange';
+  if (text.includes('60.1')) return 'Medium Blue';
+  if (text.includes('63.4')) return 'Dark Brown';
+  if (text.includes('64.1') || text.includes('Z14D') || text.includes('Z15D')) return 'Deep Royal Blue';
+  if (text.includes('65.1')) return 'Black';
+  if (text.includes('66.1')) return 'Lavender Purple';
+  if (text.includes('66.6')) return 'Olive Brown';
+  if (text.includes('67.1')) return 'Terracotta Red';
+  if (text.includes('70.1')) return 'Silver Grey';
+  if (text.includes('72.6')) return 'Light Silver';
+  return '';
+}
+
 function buildEzSpareLines() {
   if (!window.ezSpareData) return [];
   var s = window.ezSpareData;
@@ -1907,12 +1923,17 @@ function buildEzSpareLines() {
   if (s.size_2) lines.push('Secondary: ' + s.size_2);
   if (s.efs_adapter) lines.push('Adapter: ' + s.efs_adapter + (s.pattern ? ' — ' + s.pattern : '') + (s.efs_pn ? ' (' + s.efs_pn + ')' : ''));
   if (s.lug_thread) lines.push((s.lug_type || 'Lug Nut') + ': ' + s.lug_thread + (s.lug_pn ? ' (' + s.lug_pn + ')' : ''));
-  if (s.hub_ring) lines.push('Hub Ring: ' + s.hub_ring + (s.hub_ring_pn ? ' (' + s.hub_ring_pn + ')' : ''));
+  if (s.hub_ring) {
+    var colorName = getHubRingColorName(s.hub_ring, s.hub_ring_pn || '');
+    lines.push('Hub Ring: ' + s.hub_ring + (s.hub_ring_pn ? ' (' + s.hub_ring_pn + ')' : '') + (colorName ? ' — ' + colorName : ''));
+  }
   return lines;
 }
 
 function getFormData() {
   var locationInput = document.getElementById('location');
+  var lat = window._locationLat || locationInput.dataset.lat || null;
+  var lng = window._locationLng || locationInput.dataset.lng || null;
   return {
     callNum: document.getElementById('callNum').value.trim(),
     phone: document.getElementById('phone').value.trim(),
@@ -1920,8 +1941,8 @@ function getFormData() {
     name: document.getElementById('callerName').value.trim(),
     nature: buildNatureString(),
     urgent: window.isUrgent,
-    lat: locationInput.dataset.lat || null,
-    lng: locationInput.dataset.lng || null
+    lat: lat || null,
+    lng: lng || null
   };
 }
 
@@ -1934,11 +1955,9 @@ async function saveCallNumber(num) {
 
 function getMapsUrl(d) {
   if (d.lat && d.lng) {
-    // Precise coords from Google Places — opens exact pin
-    return 'https://www.google.com/maps?q=' + d.lat + ',' + d.lng;
+    return 'https://maps.google.com/?q=' + d.lat + ',' + d.lng;
   } else if (d.location) {
-    // Fallback to text search
-    return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(d.location);
+    return 'https://maps.google.com/?q=' + encodeURIComponent(d.location);
   }
   return null;
 }
@@ -2019,20 +2038,26 @@ window.dispatchInterstate = async function() {
 
 window.clearLocation = function() {
   var ind = document.getElementById('areaIndicator'); if (ind) ind.style.display = 'none';
-  var pac = document.getElementById('locationPac');
-  var hidden = document.getElementById('location');
-  if (pac) pac.value = '';
-  if (hidden) { hidden.value = ''; hidden.dataset.lat = ''; hidden.dataset.lng = ''; }
+  var input = document.getElementById('location');
+  if (input) { input.value = ''; input.dataset.lat = ''; input.dataset.lng = ''; }
+  window._locationLat = null;
+  window._locationLng = null;
 };
 
 window.verifyLocation = function() {
-  var hidden = document.getElementById('location');
-  var pac = document.getElementById('locationPac');
-  var loc = (hidden && hidden.value) || (pac && pac.value) || '';
-  if (loc) window.open('https://maps.google.com/?q=' + encodeURIComponent(loc), '_blank');
+  var input = document.getElementById('location');
+  var loc = input ? input.value.trim() : '';
+  if (!loc) return;
+  var lat = window._locationLat, lng = window._locationLng;
+  var url = (lat && lng)
+    ? 'https://www.google.com/maps?q=' + lat + ',' + lng
+    : 'https://maps.google.com/?q=' + encodeURIComponent(loc);
+  window.open(url, '_blank');
 };
 
 window.clearForm = async function() {
+  var suggEl = document.getElementById('callerIdSuggestion');
+  if (suggEl) suggEl.style.display = 'none';
   window.clearLocation();
   ['phone','callerName','notes','acQuantity','floodEquipment','customNature','customColor','customMake','customModel'].forEach(function(id){
     var el = document.getElementById(id); if (el) el.value = '';
@@ -2182,6 +2207,7 @@ async function fetchAndRenderEzSpec(year, make, model, option) {
       '<div style="color:#E8D98A;font-size:13px;"><span style="color:#9A8030;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">Hub Ring</span><br>' +
         '<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:' + dotColor + ';border:1px solid rgba(255,255,255,0.2);margin-right:6px;vertical-align:middle;"></span>' +
         '<strong>' + (spec.hub_ring || 'Direct Fit') + '</strong>' + (spec.hub_ring_pn ? ' <span style="color:#9A8030;font-size:11px;">('+spec.hub_ring_pn+')</span>' : '') +
+        (getHubRingColorName(spec.hub_ring || '', spec.hub_ring_pn || '') ? ' <span style="color:#C8A532;font-size:11px;">— ' + getHubRingColorName(spec.hub_ring || '', spec.hub_ring_pn || '') + '</span>' : '') +
       '</div>' +
     '</div>';
 }
