@@ -11,31 +11,31 @@
 window.initAutocomplete = function() {
   var input = document.getElementById('location');
   if (!input || !window.google || !window.google.maps || !window.google.maps.places) return;
-  if (!window.google.maps.places.Autocomplete) {
-    console.warn('google.maps.places.Autocomplete not available — API key may need Places API enabled');
-    return;
-  }
+
   var ac = new google.maps.places.Autocomplete(input, {
-    fields: ['formatted_address', 'geometry', 'name']
+    fields: ['formatted_address', 'geometry', 'name'],
+    types: ['geocode', 'establishment']
   });
+
+  // Bias toward Bergen County NJ
+  var bergenBounds = new google.maps.LatLngBounds(
+    new google.maps.LatLng(40.7, -74.3),
+    new google.maps.LatLng(41.1, -73.9)
+  );
+  ac.setBounds(bergenBounds);
+
   ac.addListener('place_changed', function() {
     var place = ac.getPlace();
     if (!place || !place.geometry) return;
     var name = place.name || '';
     var addr = place.formatted_address || '';
-    var addrStartsWithName = addr && name && addr.toLowerCase().indexOf(name.toLowerCase()) === 0;
-    input.value = (name && addr && !addrStartsWithName) ? name + ', ' + addr : (addr || name);
+    var startsWithName = addr && name && addr.toLowerCase().startsWith(name.toLowerCase());
+    input.value = (name && addr && !startsWithName) ? name + ', ' + addr : (addr || name);
     window._locationLat = place.geometry.location.lat();
     window._locationLng = place.geometry.location.lng();
     input.dataset.lat = window._locationLat;
     input.dataset.lng = window._locationLng;
     if (window.showAreaIndicator) window.showAreaIndicator(window._locationLat, window._locationLng);
-  });
-  input.addEventListener('input', function() {
-    window._locationLat = null;
-    window._locationLng = null;
-    input.dataset.lat = '';
-    input.dataset.lng = '';
   });
 };
 </script>
