@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" style="color-scheme: light;">
+<html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -8,38 +8,29 @@
 <link rel="apple-touch-icon" href="https://i.ibb.co/Kc2B52nS/download-1.png" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css" />
 <script>
+// Must be global for Google Maps callback — defined before the API script loads
 window.initAutocomplete = function() {
   var input = document.getElementById('location');
-  if (!input || !window.google || !window.google.maps || !window.google.maps.places) return;
+  if (!input || !window.google) return;
 
-  var ac = new google.maps.places.Autocomplete(input, {
-    fields: ['formatted_address', 'geometry', 'name'],
-    types: ['geocode', 'establishment']
+  var autocomplete = new google.maps.places.Autocomplete(input, {
+    types: ['geocode', 'establishment'],
+    componentRestrictions: { country: 'us' },
+    fields: ['formatted_address', 'geometry', 'name']
   });
 
-  // Bias toward Bergen County NJ
-  var bergenBounds = new google.maps.LatLngBounds(
-    new google.maps.LatLng(40.7, -74.3),
-    new google.maps.LatLng(41.1, -73.9)
-  );
-  ac.setBounds(bergenBounds);
-
-  ac.addListener('place_changed', function() {
-    var place = ac.getPlace();
-    if (!place || !place.geometry) return;
-    var name = place.name || '';
-    var addr = place.formatted_address || '';
-    var startsWithName = addr && name && addr.toLowerCase().startsWith(name.toLowerCase());
-    input.value = (name && addr && !startsWithName) ? name + ', ' + addr : (addr || name);
-    window._locationLat = place.geometry.location.lat();
-    window._locationLng = place.geometry.location.lng();
-    input.dataset.lat = window._locationLat;
-    input.dataset.lng = window._locationLng;
-    if (window.showAreaIndicator) window.showAreaIndicator(window._locationLat, window._locationLng);
+  autocomplete.addListener('place_changed', function() {
+    var place = autocomplete.getPlace();
+    if (!place.geometry) return;
+    var address = place.formatted_address || place.name || input.value;
+    input.value = address;
+    input.dataset.lat = place.geometry.location.lat();
+    input.dataset.lng = place.geometry.location.lng();
+    if (window.updateZoneBadge) window.updateZoneBadge();
   });
 };
 </script>
-<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAFAsM0xqmKrnirTKIH9If2s4GuDpmO6BQ&libraries=places&v=weekly&callback=initAutocomplete" async defer></script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAFAsM0xqmKrnirTKIH9If2s4GuDpmO6BQ&libraries=places&loading=async&callback=initAutocomplete" async defer></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F2ECD8; min-height: 100vh; -webkit-text-size-adjust: 100%; }
@@ -66,11 +57,29 @@ window.initAutocomplete = function() {
   .use-call-btn { background: #2E7D32; border: none; border-radius: 6px; padding: 4px 10px; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; white-space: nowrap; }
   .use-call-btn:hover { background: #388E3C; }
 
-  /* ── Location field ── */
-  .loc-wrap { position: relative; }
-  .loc-wrap input { padding-right: 72px; }
-  .map-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: #0F0E06; border: none; border-radius: 7px; padding: 6px 10px; color: #C8A532; font-size: 11px; cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 3px; white-space: nowrap; font-weight: 600; z-index: 1; }
-  .map-btn:hover { background: #1E1C08; }
+  /* ── Custom color dropdown ── */
+  .color-dropdown { position: relative; width: 100%; }
+  .color-dropdown-btn { width: 100%; padding: 11px 44px 11px 14px; border: 1.5px solid #E0CC80; border-radius: 10px; font-size: 14px; background: #FFFEF5; color: #1A1400; font-family: inherit; cursor: pointer; display: flex; align-items: center; gap: 10px; text-align: left; transition: border-color 0.15s, box-shadow 0.15s; -webkit-appearance: none; }
+  .color-dropdown-btn:focus { outline: none; border-color: #C8A532; box-shadow: 0 0 0 3px rgba(200,165,50,0.16); }
+  .color-dropdown-btn .chevron { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #C8A532; font-size: 14px; pointer-events: none; transition: transform 0.2s; }
+  .color-dropdown-btn.open .chevron { transform: translateY(-50%) rotate(180deg); }
+  .color-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; border: 1.5px solid rgba(0,0,0,0.12); }
+  .color-dropdown-menu { display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: #FFFFFF; border: 1.5px solid #E0CC80; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); z-index: 500; overflow: hidden; max-height: 260px; overflow-y: auto; }
+  .color-dropdown-menu.open { display: block; }
+  .color-option { display: flex; align-items: center; gap: 10px; padding: 9px 14px; cursor: pointer; font-size: 14px; color: #1A1400; transition: background 0.1s; }
+  .color-option:hover { background: #F5ECC0; }
+  .color-option.selected { background: #F0E8C0; font-weight: 600; }
+
+  /* ── Google Places Autocomplete overrides ── */
+  .pac-container { border-radius: 10px; border: 1.5px solid #E0CC80; box-shadow: 0 4px 20px rgba(0,0,0,0.12); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin-top: 4px; background: #FFFEF5; z-index: 9999; }
+  .pac-item { padding: 10px 14px; font-size: 14px; color: #1A1400; cursor: pointer; border-top: 1px solid #F0E8C0; }
+  .pac-item:first-child { border-top: none; }
+  .pac-item:hover, .pac-item-selected { background: #F5ECC0; }
+  .pac-item-query { font-size: 14px; color: #1A1400; font-weight: 600; }
+  .pac-matched { color: #C8A532; }
+  .pac-icon { display: none; }
+
+  /* ── Beta tag ── */
   .beta-tag { display: inline-block; background: #C8A532; color: #0F0E06; font-size: 9px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; vertical-align: middle; margin-left: 6px; position: relative; top: -2px; }
   .db-loading { display: flex; align-items: center; gap: 8px; background: #1A1600; border: 1px solid #3A3010; border-radius: 10px; padding: 0.6rem 1rem; margin-bottom: 1rem; font-size: 12px; color: #9A8030; }
   .db-loading.hidden { display: none; }
@@ -78,17 +87,17 @@ window.initAutocomplete = function() {
   @keyframes spin { to { transform: rotate(360deg); } }
 
   /* ── Page ── */
-  .page { max-width: 680px; margin: 0 auto; padding: 1.5rem 1.25rem 5rem; }
+  .page { max-width: 680px; margin: 0 auto; padding: 1.5rem 1.25rem 3rem; }
   .section-row { display: flex; align-items: center; gap: 8px; margin-bottom: 1rem; }
   .dot { width: 7px; height: 7px; border-radius: 50%; background: #C8A532; }
   .section-lbl { font-size: 10px; font-weight: 600; color: #8B6E1A; letter-spacing: 2px; text-transform: uppercase; }
 
   /* ── Card ── */
-  .form-card { background: #FDFBF0; border-radius: 18px; border: 1px solid #DDD09A; overflow: visible; box-shadow: 0 4px 24px rgba(180,140,20,0.10); }
-  .card-hdr { background: #0F0E06; padding: 1rem 1.25rem; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #221E08; border-radius: 17px 17px 0 0; }
+  .form-card { background: #fff; border-radius: 18px; border: 1px solid #DDD09A; overflow: hidden; box-shadow: 0 4px 24px rgba(180,140,20,0.10); }
+  .card-hdr { background: #0F0E06; padding: 1rem 1.25rem; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #221E08; }
   .card-ttl { color: #C8A532; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
   .card-ttl i { font-size: 18px; }
-  .card-body { padding: 1.4rem 1.4rem 2rem; background: #FDFBF0; border-radius: 0 0 17px 17px; }
+  .card-body { padding: 1.4rem 1.4rem 1.25rem; background: #FDFBF0; }
 
   /* ── Call number badge ── */
   .callnum-wrap { position: relative; }
@@ -121,140 +130,36 @@ window.initAutocomplete = function() {
   .lbl i { font-size: 14px; color: #C8A532; }
   .req { color: #C8A532; }
 
-  /* ── Base inputs, textareas, selects ── */
   input[type=text], input[type=tel], input[type=number], textarea, select {
-    width: 100%;
-    padding: 11px 14px;
-    border: 1.5px solid #E0CC80;
-    border-radius: 10px;
-    font-size: 14px;
-    line-height: 1.4;
-    background: #FFFEF5;
-    color: #1A1400;
-    font-family: inherit;
-    transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
-    -webkit-appearance: none;
-    appearance: none;
+    width: 100%; padding: 11px 14px; border: 1.5px solid #E0CC80; border-radius: 10px;
+    font-size: 14px; background: #FFFEF5; color: #1A1400; font-family: inherit;
+    transition: border-color 0.15s, box-shadow 0.15s; -webkit-appearance: none; appearance: none;
   }
-  input:focus, textarea:focus, select:focus {
-    outline: none;
-    border-color: #C8A532;
-    box-shadow: 0 0 0 3px rgba(200,165,50,0.16);
-    background: #FFFFFF;
-  }
-  input::placeholder, textarea::placeholder { color: #C0A860; opacity: 0.8; }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: #C8A532; box-shadow: 0 0 0 3px rgba(200,165,50,0.16); background: #FFFFFF; }
+  input::placeholder, textarea::placeholder { color: #C0A860; opacity: 0.7; }
   textarea { resize: vertical; min-height: 80px; line-height: 1.55; }
-
-  /* Prevent iOS zoom — 16px on mobile via media query below */
-
-  /* ── Select — gold chevron, cream bg, consistent with inputs ── */
   select {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23C8A532' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 12px center;
-    padding-right: 38px;
-    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23C8A532' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 14px center; cursor: pointer; padding-right: 36px;
   }
-  select:disabled { opacity: 0.4; cursor: not-allowed; }
-  .inp-wrap.has-save select { padding-right: 76px; }
+  select:disabled { opacity: 0.5; cursor: not-allowed; }
 
-  /* Optgroup / option styling (where browsers support it) */
-  select optgroup { font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; }
-  select option { color: #1A1400; background: #FFFEF5; }
-  select option[value=""] { color: #C0A860; }
+  /* ── Location ── */
+  .loc-wrap { position: relative; }
+  .loc-wrap input { padding-right: 72px; }
+  .map-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: #0F0E06; border: none; border-radius: 7px; padding: 6px 10px; color: #C8A532; font-size: 11px; cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 3px; white-space: nowrap; font-weight: 600; }
+  .map-btn:hover { background: #1E1C08; }
 
-  /* ── Nature of call — slightly bolder ── */
-  #natureType { font-weight: 500; letter-spacing: 0.1px; }
-
-  /* ── Universal custom dropdown (replaces all native selects) ── */
-  .custom-select-wrap { position: relative; width: 100%; }
-  .custom-select-btn {
-    width: 100%; padding: 11px 38px 11px 14px;
-    border: 1.5px solid #E0CC80; border-radius: 10px;
-    font-size: 14px; line-height: 1.4;
-    background: #FFFEF5; color: #1A1400;
-    font-family: inherit; cursor: pointer;
-    display: flex; align-items: center; gap: 8px;
-    text-align: left; position: relative;
-    transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
-    -webkit-appearance: none;
-  }
-  .custom-select-btn:hover { border-color: #C8A532; }
-  .custom-select-btn.open, .custom-select-btn:focus {
-    outline: none; border-color: #C8A532;
-    box-shadow: 0 0 0 3px rgba(200,165,50,0.16); background: #FFFFFF;
-  }
-  .custom-select-btn.disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
-  .cs-label { flex: 1; }
-  .cs-label.placeholder { color: #C0A860; }
-  .cs-chevron {
-    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
-    color: #C8A532; pointer-events: none; transition: transform 0.18s;
-    display: flex; align-items: center;
-  }
-  .custom-select-btn.open .cs-chevron { transform: translateY(-50%) rotate(180deg); }
-  .custom-select-menu {
-    display: none; position: absolute; top: calc(100% + 5px); left: 0; right: 0;
-    background: #FFFEF5; border: 1.5px solid #E0CC80; border-radius: 12px;
-    box-shadow: 0 6px 24px rgba(180,140,20,0.13);
-    z-index: 700; overflow: hidden; max-height: 240px; overflow-y: auto;
-  }
-  .custom-select-menu.open { display: block; }
-  .cs-optgroup { padding: 7px 14px 4px; font-size: 10px; font-weight: 700;
-    letter-spacing: 1.2px; text-transform: uppercase; color: #8B6E1A;
-    background: #F5ECC0; border-bottom: 1px solid #E8D898; }
-  .cs-option {
-    display: flex; align-items: center; gap: 10px;
-    padding: 10px 14px; cursor: pointer; font-size: 14px; color: #1A1400;
-    border-bottom: 1px solid #F0E8C0; transition: background 0.1s;
-  }
-  .cs-option:last-child { border-bottom: none; }
-  .cs-option:hover { background: #F5ECC0; }
-  .cs-option.selected { background: #EDE0A0; font-weight: 600; color: #6B5515; }
-  .inp-wrap.has-save .custom-select-btn { padding-right: 76px; }
-  .has-save-pad { padding-right: 76px !important; }
-
-  /* Keep color dot style */
-  .color-dot { width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.1); }
-
-  /* ── Location field — standard inp-wrap, pac element hidden off-screen ── */
-
-  /* ── Area coverage indicator ── */
-  .area-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; letter-spacing: 0.3px; }
-  .area-badge.primary { background: #0A2A0A; border: 1px solid #2E7D32; color: #81C784; }
-  .area-badge.secondary { background: #2A1F00; border: 1px solid #C8A532; color: #FFD54F; }
-  .area-badge.outside { background: #2A0A0A; border: 1px solid #8B2000; color: #EF9A9A; }
-  .area-badge.checking { background: #1A1600; border: 1px solid #3A3010; color: #9A8030; }
-
-  /* ── Google Places autocomplete dropdown ── */
-  .pac-container {
-    border-radius: 12px !important;
-    border: 1.5px solid #E0CC80 !important;
-    box-shadow: 0 6px 24px rgba(180,140,20,0.13) !important;
-    background: #FFFEF5 !important;
-    font-family: inherit !important;
-    margin-top: 5px;
-    overflow: hidden;
-    z-index: 9999;
-  }
-  .pac-item {
-    padding: 10px 14px !important;
-    font-size: 14px !important;
-    color: #1A1400 !important;
-    cursor: pointer;
-    border-top: 1px solid #F0E8C0 !important;
-    line-height: 1.4;
-  }
-  .pac-item:first-child { border-top: none !important; }
-  .pac-item:hover, .pac-item-selected { background: #F5ECC0 !important; }
-  .pac-item-query { font-size: 14px !important; color: #1A1400 !important; font-weight: 600; }
-  .pac-matched { color: #C8A532 !important; }
-  .pac-icon, .pac-logo { display: none !important; }
-
-  /* ── Mobile color picker overlay ── */
-  #colorPickerOverlay .color-option { border-radius: 8px; margin: 2px 0; border-bottom: none; }
-  #colorPickerOverlay .color-option:hover { background: #F5ECC0; }
-  #colorPickerOverlay .color-option.selected { background: #EDE0A0; }
+  /* ── Zone badge ── */
+  .zone-badge { display: none; align-items: center; gap: 6px; margin-top: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.3px; padding: 5px 10px; border-radius: 8px; }
+  .zone-badge.on { display: inline-flex; }
+  .zone-badge .zdot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .zone-badge.zone-primary { background: #3A0A14; color: #F06090; border: 1px solid #8B2050; }
+  .zone-badge.zone-primary .zdot { background: #E0326E; }
+  .zone-badge.zone-secondary { background: #2A1E00; color: #F9C24A; border: 1px solid #8B6A00; }
+  .zone-badge.zone-secondary .zdot { background: #F9A825; }
+  .zone-badge.zone-outside { background: #16180F; color: #9AA080; border: 1px solid #3A3E28; }
+  .zone-badge.zone-outside .zdot { background: #7A8060; }
 
   /* ── Section subheader ── */
   .sub-hdr { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 600; color: #8B6E1A; letter-spacing: 1.5px; text-transform: uppercase; margin: 1.2rem 0 0.9rem; }
@@ -361,31 +266,25 @@ window.initAutocomplete = function() {
     .brand-tag { font-size: 10px; }
 
     /* Card */
-    .card-hdr { padding: 0.75rem 1rem; border-radius: 17px 17px 0 0; }
+    .card-hdr { padding: 0.75rem 1rem; }
     .card-ttl { font-size: 13px; }
-    .card-body { padding: 1rem 1rem 1.75rem; border-radius: 0 0 17px 17px; }
-
-    /* Page bottom */
-    .page { padding: 0.75rem 0.6rem 4rem; }
+    .card-body { padding: 1rem; }
 
     /* Grids → single column */
     .grid2, .grid3 { grid-template-columns: 1fr; gap: 0; }
     .grid2 > div:not(:last-child),
     .grid3 > div:not(:last-child) { margin-bottom: 1rem; }
 
-    /* Inputs — bigger tap targets, prevent iOS zoom */
-    input[type=text], input[type=tel], input[type=number], textarea, select,
-    .color-dropdown-btn {
-      font-size: 16px;
+    /* Inputs — bigger tap targets */
+    input[type=text], input[type=tel], input[type=number], textarea, select {
+      font-size: 16px; /* prevents iOS zoom */
       padding: 12px 14px;
     }
-    select { padding-right: 38px; }
-    .color-dropdown-btn { padding: 12px 38px 12px 14px; }
     .inp-wrap.has-save input,
     .inp-wrap.has-save select { padding-right: 76px; }
 
     /* Location row */
-    .loc-wrap input { padding-right: 72px; }
+    .loc-wrap input { padding-right: 72px !important; }
     .map-btn { padding: 7px 9px; font-size: 11px; }
 
     /* Paste maps buttons */
@@ -478,7 +377,7 @@ window.initAutocomplete = function() {
       <!-- Call # + Phone -->
       <div class="grid2">
         <div>
-          <div class="lbl"><i class="ti ti-hash"></i> Call #</div>
+          <div class="lbl"><i class="ti ti-hash"></i> Call # <span class="req">*</span></div>
           <div class="inp-wrap callnum-wrap">
             <input type="text" id="callNum" placeholder="Loading..." />
             <button class="field-clear" onclick="window.clearField('callNum')" tabindex="-1">&times;</button>
@@ -506,14 +405,14 @@ window.initAutocomplete = function() {
       <!-- Location -->
       <div class="field">
         <div class="lbl"><i class="ti ti-map-pin"></i> Location <span class="req">*</span></div>
-        <div class="inp-wrap loc-wrap" id="locationWrap">
-          <input type="text" id="location" placeholder="123 Main St, Edison, NJ" oninput="window._locationLat=null;window._locationLng=null;this.dataset.lat='';this.dataset.lng='';" />
-          <button class="field-clear" onclick="window.clearLocation()" tabindex="-1" style="right:56px;">&times;</button>
+        <div class="inp-wrap loc-wrap">
+          <input type="text" id="location" placeholder="123 Main St, Edison, NJ" style="padding-right:90px;" oninput="document.getElementById('location').dataset.lat=''; document.getElementById('location').dataset.lng=''; window.updateZoneBadge();" />
+          <button class="field-clear" onclick="window.clearField('location')" tabindex="-1" style="right:56px;">&times;</button>
           <button class="map-btn" onclick="window.verifyLocation()"><i class="ti ti-map-pin" style="font-size:12px;"></i> Map</button>
         </div>
-        <!-- Area indicator -->
-        <div id="areaIndicator" style="display:none;margin-top:6px;">
-          <span id="areaBadge" class="area-badge"></span>
+        <div id="zoneBadge" class="zone-badge">
+          <span class="zdot"></span>
+          <span id="zoneBadgeText"></span>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;">
           <button class="paste-maps-btn" onclick="window.pasteMapsUrl()" style="margin-top:0;">
@@ -532,41 +431,32 @@ window.initAutocomplete = function() {
           <input type="text" id="callerName" placeholder="John Doe" />
           <button class="field-clear" onclick="window.clearField('callerName')" tabindex="-1">&times;</button>
         </div>
-        <div id="callerIdSuggestion" style="display:none;margin-top:5px;">
-          <button onclick="window.acceptCallerIdName()" style="display:flex;align-items:center;gap:6px;background:transparent;border:1.5px dashed #C8A532;border-radius:8px;padding:5px 12px;color:#8B6E1A;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all 0.15s;">
-            <i class="ti ti-id-badge" style="font-size:13px;color:#C8A532;"></i>
-            <span>Use caller ID: <strong id="callerIdName" style="color:#1A1400;"></strong></span>
-          </button>
-        </div>
       </div>
 
       <!-- Nature of call -->
       <div class="field">
         <div class="lbl"><i class="ti ti-list"></i> Nature of call <span class="req">*</span></div>
-        <div class="custom-select-wrap" id="natureWrap">
-          <button type="button" class="custom-select-btn" id="natureBtn" onclick="window.csToggle('nature')">
-            <span class="cs-label placeholder" id="natureBtnLabel">— Select type —</span>
-            <span class="cs-chevron"><i class="ti ti-chevron-down"></i></span>
-          </button>
-          <input type="hidden" id="natureType" />
-          <div class="custom-select-menu" id="natureMenu">
-            <div class="cs-optgroup">Vehicle</div>
-            <div class="cs-option" data-value="flat_tire" onclick="window.csSelect('nature','flat_tire','Flat Tire')">Flat Tire</div>
-            <div class="cs-option" data-value="boost" onclick="window.csSelect('nature','boost','Boost / Jump Start')">Boost / Jump Start</div>
-            <div class="cs-option" data-value="out_of_gas" onclick="window.csSelect('nature','out_of_gas','Out of Gas')">Out of Gas</div>
-            <div class="cs-option" data-value="lockout" onclick="window.csSelect('nature','lockout','Lockout')">Lockout</div>
-            <div class="cs-option" data-value="vehicle_stalled" onclick="window.csSelect('nature','vehicle_stalled','Vehicle Stalled')">Vehicle Stalled</div>
-            <div class="cs-option" data-value="vehicle_pullout" onclick="window.csSelect('nature','vehicle_pullout','Vehicle Pullout')">Vehicle Pullout</div>
-            <div class="cs-option" data-value="plastic_hanging" onclick="window.csSelect('nature','plastic_hanging','Plastic Hanging')">Plastic Hanging</div>
-            <div class="cs-option" data-value="bumper_hanging" onclick="window.csSelect('nature','bumper_hanging','Bumper Hanging')">Bumper Hanging</div>
-            <div class="cs-optgroup">Community / Home</div>
-            <div class="cs-option" data-value="flood" onclick="window.csSelect('nature','flood','Flood')">Flood</div>
-            <div class="cs-option" data-value="heater" onclick="window.csSelect('nature','heater','Heater Request')">Heater Request</div>
-            <div class="cs-option" data-value="ac" onclick="window.csSelect('nature','ac','AC Request')">AC Request</div>
-            <div class="cs-optgroup">Other</div>
-            <div class="cs-option" data-value="other" onclick="window.csSelect('nature','other','Other')">Other</div>
-          </div>
-        </div>
+        <select id="natureType" onchange="window.onNatureChange()">
+          <option value="">— Select type —</option>
+          <optgroup label="Vehicle">
+            <option value="flat_tire">Flat Tire</option>
+            <option value="boost">Boost / Jump Start</option>
+            <option value="out_of_gas">Out of Gas</option>
+            <option value="lockout">Lockout</option>
+            <option value="vehicle_stalled">Vehicle Stalled</option>
+            <option value="vehicle_pullout">Vehicle Pullout</option>
+            <option value="plastic_hanging">Plastic Hanging</option>
+            <option value="bumper_hanging">Bumper Hanging</option>
+          </optgroup>
+          <optgroup label="Community / Home">
+            <option value="flood">Flood</option>
+            <option value="heater">Heater Request</option>
+            <option value="ac">AC Request</option>
+          </optgroup>
+          <optgroup label="Other">
+            <option value="other">Other</option>
+          </optgroup>
+        </select>
       </div>
 
       <!-- Custom nature field (shown when "Other" selected) -->
@@ -596,26 +486,6 @@ window.initAutocomplete = function() {
         <button class="chip" onclick="window.selectChip(event,'spare','with_spare','With spare')">With spare</button>
         <button class="chip" onclick="window.selectChip(event,'spare','no_spare','No spare')">No spare</button>
         <button class="chip" onclick="window.selectChip(event,'spare','no_spare_needs_ez','No spare — needs EZ spare')">No spare, needs EZ spare</button>
-      </div>
-
-      <!-- EZ Spare lookup (shown when "needs EZ spare" selected) -->
-      <div class="ac-qty" id="ezSpareWrap">
-        <div style="background:#0F0E06;border:1.5px solid #C8A532;border-radius:12px;padding:1rem;margin-bottom:1rem;">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
-            <div style="display:flex;align-items:center;gap:8px;">
-              <i class="ti ti-wheel" style="color:#C8A532;font-size:18px;"></i>
-              <span style="color:#C8A532;font-size:13px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;">EZ Spare Fitment</span>
-            </div>
-            <button onclick="window.lookupEzSpare()" style="background:#C8A532;border:none;border-radius:7px;padding:5px 12px;color:#0F0E06;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">
-              <i class="ti ti-refresh" style="font-size:12px;"></i> Refresh
-            </button>
-          </div>
-
-          <!-- Results -->
-          <div id="ezSpareResult" style="color:#9A8030;font-size:13px;font-style:italic;">
-            Enter Year, Make &amp; Model above to look up EZ Spare fitment.
-          </div>
-        </div>
       </div>
 
       <!-- Lockout: vehicle or house -->
@@ -665,18 +535,16 @@ window.initAutocomplete = function() {
               <!-- Populated by JS based on device -->
             </div>
             <div id="customColorWrap" style="display:none;margin-top:6px;">
-              <input type="text" id="customColor" placeholder="Enter color..." />
+              <input type="text" id="customColor" placeholder="Enter color..." style="font-size:14px;" />
             </div>
           </div>
           <div>
             <div class="lbl"><i class="ti ti-calendar"></i> Year</div>
-            <div class="custom-select-wrap" id="yearWrap">
-              <button type="button" class="custom-select-btn" id="yearBtn" onclick="window.csToggle('year')">
-                <span class="cs-label placeholder" id="yearBtnLabel">— Year —</span>
-                <span class="cs-chevron"><i class="ti ti-chevron-down"></i></span>
-              </button>
-              <input type="hidden" id="vYear" />
-              <div class="custom-select-menu" id="yearMenu"></div>
+            <div class="inp-wrap" id="yearInputWrap">
+              <!-- Populated by JS based on device -->
+            </div>
+            <div id="customYearWrap" style="display:none;margin-top:6px;">
+              <input type="text" id="customYear" placeholder="Enter year..." maxlength="4" style="font-size:14px;" />
             </div>
           </div>
         </div>
@@ -706,16 +574,7 @@ window.initAutocomplete = function() {
             <input type="text" id="customModel" placeholder="Enter model..." style="font-size:14px;" />
           </div>
         </div>
-
-        <!-- Trim — shown when EZ Spare lookup has multiple options -->
-        <div class="field" id="trimField" style="display:none;">
-          <div class="lbl"><i class="ti ti-list-details"></i> Trim</div>
-          <div class="inp-wrap">
-            <select id="ezSpareTrimSelect" onchange="window.onEzSpareTrimChange()">
-              <option value="">— Select trim —</option>
-            </select>
-          </div>
-        </div>
+      </div>
 
       <!-- Additional notes -->
       <div class="field">
@@ -740,9 +599,8 @@ window.initAutocomplete = function() {
     <div class="preview-txt" id="previewText"></div>
   </div>
 </div>
-</div>
 
-<!-- end .page -->
+<!-- Locked inside modal -->
 <div class="modal-overlay" id="trappedModal">
   <div class="modal">
     <div class="modal-hdr">
@@ -845,6 +703,58 @@ window.makesData = {
   "Other":["Other"]
 };
 
+// ── Coverage zone polygons (from Bergen Dispatch Map, "Coverage Areas" layer) ──
+// Coordinates are [lng, lat] pairs, matching KML order.
+var ZONE_PRIMARY = [[-74.0344763,40.9038942],[-74.0373013,40.9030386],[-74.0387022,40.9011974],[-74.0372547,40.8973529],[-74.0417404,40.8938154],[-74.0436928,40.8909594],[-74.0423515,40.8887529],[-74.0399214,40.8881364],[-74.0418889,40.884543],[-74.0442855,40.8817932],[-74.0111374,40.8698672],[-73.9871874,40.9005629],[-73.9835002,40.9304979],[-74.0361936,40.9305771],[-74.0390168,40.9236826],[-74.0399411,40.9196857],[-74.0363158,40.9144894],[-74.034632,40.9139019],[-74.033635,40.9140278],[-74.0313704,40.9082575],[-74.0335359,40.9070627],[-74.0344763,40.9038942]];
+var ZONE_SECONDARY = [[-74.0291089,41.0376667],[-74.1219972,41.0423333],[-74.1727379,41.1160838],[-74.234309,41.1428502],[-74.3015898,40.9851222],[-74.2703464,40.9119992],[-74.174704,40.9536278],[-74.147373,40.9493056],[-74.1477267,40.9426809],[-74.1429933,40.9414829],[-74.1380456,40.9341255],[-74.1410543,40.9295969],[-74.1405229,40.9255398],[-74.13846,40.9239759],[-74.1357105,40.9242926],[-74.1297317,40.9226961],[-74.1289322,40.9199123],[-74.1293344,40.9172582],[-74.1322669,40.9135901],[-74.1325427,40.9121643],[-74.1301353,40.9062249],[-74.1293344,40.9028581],[-74.11583,40.9055696],[-74.0935995,40.904989],[-74.0721446,40.8974147],[-74.0484876,40.8714289],[-74.0425641,40.870096],[-74.0322484,40.8582694],[-74.023837,40.8463236],[-74.0210049,40.8413818],[-74.0272965,40.8175847],[-73.9883497,40.8011421],[-73.969129,40.8301545],[-73.968569,40.8399332],[-73.9586825,40.8523749],[-73.9630543,40.8532758],[-73.9627322,40.854339],[-73.9584188,40.85341],[-73.930558,40.9052],[-73.8997328,40.9961672],[-74.0291089,41.0376667]];
+
+// Ray-casting point-in-polygon. poly = array of [lng, lat].
+function pointInPoly(lng, lat, poly) {
+  var inside = false;
+  for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    var xi = poly[i][0], yi = poly[i][1];
+    var xj = poly[j][0], yj = poly[j][1];
+    var intersect = ((yi > lat) !== (yj > lat)) &&
+      (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+// Returns 'primary', 'secondary', or 'outside'
+window.getZone = function(lat, lng) {
+  if (lat == null || lng == null || lat === '' || lng === '') return null;
+  lat = parseFloat(lat); lng = parseFloat(lng);
+  if (isNaN(lat) || isNaN(lng)) return null;
+  if (pointInPoly(lng, lat, ZONE_PRIMARY)) return 'primary';
+  if (pointInPoly(lng, lat, ZONE_SECONDARY)) return 'secondary';
+  return 'outside';
+};
+
+window.updateZoneBadge = function() {
+  var locEl = document.getElementById('location');
+  var badge = document.getElementById('zoneBadge');
+  var text = document.getElementById('zoneBadgeText');
+  var lat = locEl.dataset.lat, lng = locEl.dataset.lng;
+  var zone = window.getZone(lat, lng);
+
+  badge.classList.remove('zone-primary', 'zone-secondary', 'zone-outside', 'on');
+  window.currentZone = zone;
+
+  if (!zone) return;
+
+  if (zone === 'primary') {
+    badge.classList.add('zone-primary', 'on');
+    text.textContent = 'Primary Zone — Bergen County covers this call';
+  } else if (zone === 'secondary') {
+    badge.classList.add('zone-secondary', 'on');
+    text.textContent = 'Secondary Zone — Interstate dispatches only if requested';
+  } else {
+    badge.classList.add('zone-outside', 'on');
+    text.textContent = 'Outside Bergen coverage area';
+  }
+};
+
 // ── Telzio live call polling ──
 // Replace with your Cloudflare Worker URL after deploying telzio-proxy.js
 const TELZIO_PROXY_URL = 'https://cobc.shmueleidelman-work.workers.dev/proxy';
@@ -868,10 +778,9 @@ async function pollTelzioLiveCalls() {
     if (inbound.length > 0) {
       var call = inbound[0];
       var from = call.From || '';
-      var callerName = call.CallerName || call.caller_name || call.FromName || '';
+      // Format: +12015551234 → (201) 555-1234
       var formatted = formatPhone(from);
       lastLiveCallFrom = formatted;
-      window.lastLiveCallerName = callerName;
 
       statusEl.textContent = 'Live call';
       statusEl.className = 'telzio-status live';
@@ -879,36 +788,14 @@ async function pollTelzioLiveCalls() {
       // Only show banner if phone field is empty or different
       var currentPhone = document.getElementById('phone').value.trim();
       if (currentPhone !== formatted) {
-        numEl.innerHTML = formatted + (callerName ? ' &nbsp;<span style="opacity:0.7;font-size:12px;">· ' + callerName + '</span>' : '');
+        numEl.textContent = formatted;
         banner.style.display = 'flex';
-      }
-
-      // Suggest caller name if the field is empty
-      var nameEl = document.getElementById('callerName');
-      if (callerName && nameEl && !nameEl.value.trim()) {
-        nameEl.placeholder = 'John Doe';
-        var suggEl = document.getElementById('callerIdSuggestion');
-        var suggName = document.getElementById('callerIdName');
-        if (suggEl && suggName) {
-          suggName.textContent = callerName;
-          suggEl.style.display = 'block';
-          nameEl.dataset.callerIdSuggestion = callerName;
-        }
       }
     } else {
       lastLiveCallFrom = null;
-      window.lastLiveCallerName = '';
       statusEl.textContent = '';
       statusEl.className = 'telzio-status';
       banner.style.display = 'none';
-      // Clear caller ID suggestion if field still empty
-      var nameEl = document.getElementById('callerName');
-      var suggEl = document.getElementById('callerIdSuggestion');
-      if (nameEl && !nameEl.value.trim()) {
-        nameEl.placeholder = 'John Doe';
-        delete nameEl.dataset.callerIdSuggestion;
-        if (suggEl) suggEl.style.display = 'none';
-      }
     }
   } catch(e) {
     // Silently fail — don't disrupt dispatch
@@ -961,32 +848,11 @@ window.pullLastCall = async function() {
   }
 };
 
-window.acceptCallerIdName = function() {
-  var nameEl = document.getElementById('callerName');
-  var suggEl = document.getElementById('callerIdSuggestion');
-  var name = nameEl && nameEl.dataset.callerIdSuggestion;
-  if (name) {
-    nameEl.value = name;
-    delete nameEl.dataset.callerIdSuggestion;
-  }
-  if (suggEl) suggEl.style.display = 'none';
-  showToast('\u2713 Caller name filled from caller ID');
-};
-
 window.fillFromLiveCall = function() {
   if (lastLiveCallFrom) {
     document.getElementById('phone').value = lastLiveCallFrom;
     document.getElementById('liveCallBanner').style.display = 'none';
-    // Also fill caller name if available and field is empty
-    var nameEl = document.getElementById('callerName');
-    if (nameEl && !nameEl.value.trim() && window.lastLiveCallerName) {
-      nameEl.value = window.lastLiveCallerName;
-      nameEl.placeholder = 'John Doe';
-      delete nameEl.dataset.callerIdSuggestion;
-      showToast('\u2713 Phone + name filled from live call');
-    } else {
-      showToast('\u2713 Phone filled from live call');
-    }
+    showToast('\u2713 Phone filled from live call');
   }
 };
 
@@ -1094,21 +960,18 @@ window.pasteMapsUrl = async function() {
 
   if (coords) {
     var loc = coords.lat + ', ' + coords.lng;
-    var hidden = document.getElementById('location');
-    hidden.value = loc;
-    hidden.dataset.lat = coords.lat;
-    hidden.dataset.lng = coords.lng;
-    window._locationLat = parseFloat(coords.lat);
-    window._locationLng = parseFloat(coords.lng);
+    document.getElementById('location').value = loc;
+    document.getElementById('location').dataset.lat = coords.lat;
+    document.getElementById('location').dataset.lng = coords.lng;
     updateMapsLink();
+    window.updateZoneBadge();
     showToast('\u2713 Coordinates set: ' + loc);
-    window.showAreaIndicator(parseFloat(coords.lat), parseFloat(coords.lng));
   } else if (url.includes('goo.gl') || url.includes('maps.app') || url.includes('maps.google')) {
-    var hidden = document.getElementById('location');
-    hidden.value = url;
-    hidden.dataset.lat = '';
-    hidden.dataset.lng = '';
+    document.getElementById('location').value = url;
+    document.getElementById('location').dataset.lat = '';
+    document.getElementById('location').dataset.lng = '';
     updateMapsLink();
+    window.updateZoneBadge();
     showToast('Link pasted as location');
   } else {
     showToast('Could not extract coordinates from that link');
@@ -1121,6 +984,10 @@ window.clearField = function(id) {
   if (!el) return;
   el.value = '';
   el.focus();
+  if (id === 'location') {
+    el.dataset.lat = ''; el.dataset.lng = '';
+    window.updateZoneBadge();
+  }
 };
 
 // ── Toast ──
@@ -1132,21 +999,103 @@ function showToast(msg) {
 }
 
 // ── Populate color datalist ──
+window.toggleColorDropdown = function() {
+  var btn = document.getElementById('colorDropdownBtn');
+  var menu = document.getElementById('colorDropdownMenu');
+  if (!btn || !menu) return;
+  var isOpen = menu.classList.contains('open');
+  if (isOpen) {
+    menu.classList.remove('open');
+    btn.classList.remove('open');
+  } else {
+    menu.classList.add('open');
+    btn.classList.add('open');
+    // Close on outside click
+    setTimeout(function() {
+      document.addEventListener('click', function handler(e) {
+        if (!document.getElementById('colorDropdown').contains(e.target)) {
+          menu.classList.remove('open');
+          btn.classList.remove('open');
+          document.removeEventListener('click', handler);
+        }
+      });
+    }, 0);
+  }
+};
+
+window.selectDesktopColor = function(color) {
+  document.getElementById('vColor').value = color;
+  var label = document.getElementById('colorDropdownLabel');
+  var dot   = document.getElementById('colorDot');
+  var btn   = document.getElementById('colorDropdownBtn');
+  var menu  = document.getElementById('colorDropdownMenu');
+  if (label) label.textContent = color || '— Select color —';
+  if (dot) {
+    var c = COLOR_MAP[color];
+    if (c) {
+      dot.style.background = c;
+      dot.style.borderColor = (color==='White'||color==='Beige'||color==='Silver') ? '#CCC' : 'rgba(0,0,0,0.12)';
+      dot.style.display = 'inline-block';
+    } else { dot.style.display = 'none'; }
+  }
+  // Update selected state in menu
+  if (menu) menu.querySelectorAll('.color-option').forEach(function(o){
+    o.classList.toggle('selected', o.dataset.value === color);
+  });
+  if (btn) btn.classList.remove('open');
+  if (menu) menu.classList.remove('open');
+  // Show custom field if Other
+  var customWrap = document.getElementById('customColorWrap');
+  if (customWrap) customWrap.style.display = (color === 'Other') ? 'block' : 'none';
+};
+
 function buildDesktopColorMenu(colors) {
-  var menu = document.getElementById('colorMenu');
+  var menu = document.getElementById('colorDropdownMenu');
   if (!menu) return;
   menu.innerHTML = '';
   colors.forEach(function(color) {
     var opt = document.createElement('div');
-    opt.className = 'cs-option';
+    opt.className = 'color-option';
     opt.dataset.value = color;
-    var c = COLOR_MAP[color] || null;
-    var dotHtml = c ? '<span class="color-dot" style="background:' + c + ';border-color:' + ((color==='White'||color==='Beige'||color==='Silver')?'#CCC':'rgba(0,0,0,0.1)') + ';"></span>' : '';
-    opt.innerHTML = dotHtml + color;
-    opt.onclick = function() { window.csSelect('color', color, color); };
+    var c = COLOR_MAP[color] || '#999';
+    var border = (color==='White'||color==='Beige'||color==='Silver') ? '#CCC' : 'rgba(0,0,0,0.12)';
+    opt.innerHTML =
+      '<span class="color-dot" style="background:' + c + ';border-color:' + border + ';' + (!COLOR_MAP[color] ? 'display:none;' : '') + '"></span>' +
+      color;
+    opt.addEventListener('click', function() { window.selectDesktopColor(color); });
     menu.appendChild(opt);
   });
 }
+
+function populateColors(colors) {
+  var allColors = colors.filter(function(c){ return c !== 'Other'; }).concat(['Other']);
+  window._colorOptions = allColors;
+
+  var overlay = document.getElementById('colorPickerOverlay');
+  if (overlay) overlay.remove();
+
+  if (isMobile) {
+    // Mobile: rebuild overlay from _colorOptions on next open
+  } else {
+    // Desktop: populate custom dropdown menu
+    buildDesktopColorMenu(allColors);
+    // Also keep hidden input in sync
+    var sel = document.getElementById('vColor');
+    // hidden input — no options needed
+  }
+}
+
+window.onColorChange = function() {
+  var color = document.getElementById('vColor') ? document.getElementById('vColor').value : '';
+  var customWrap = document.getElementById('customColorWrap');
+  if (customWrap) customWrap.style.display = (color === 'Other') ? 'block' : 'none';
+};
+
+window.onModelInputChange = function() {
+  var model = document.getElementById('vModel') ? document.getElementById('vModel').value.trim() : '';
+  var customWrap = document.getElementById('customModelWrap');
+  if (customWrap) customWrap.style.display = (model === 'Other') ? 'block' : 'none';
+};
 
 // ── Color → CSS color map for swatches ──
 var COLOR_MAP = {
@@ -1157,16 +1106,26 @@ var COLOR_MAP = {
   'Yellow':'#FDD835'
 };
 
-// Mobile color picker (bottom sheet)
+function getSwatchHtml(color) {
+  var c = COLOR_MAP[color];
+  if (!c) return '';
+  var border = (color === 'White' || color === 'Beige' || color === 'Silver') ? '#CCC' : c;
+  return '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + c + ';border:1px solid ' + border + ';margin-right:6px;vertical-align:middle;"></span>';
+}
+
+// On mobile, <select> doesn't support HTML in options.
+// We use a custom dropdown overlay instead for color.
 function buildColorSelect(colors, wrap) {
+  // Use a button that opens a custom color picker overlay
+  var current = '';
   wrap.innerHTML =
-    '<button type="button" id="colorPickerBtn" onclick="window.openColorPicker()" style="width:100%;padding:11px 40px 11px 14px;border:1.5px solid #E0CC80;border-radius:10px;font-size:14px;background:#FFFEF5;color:#1A1400;font-family:inherit;text-align:left;cursor:pointer;display:flex;align-items:center;gap:8px;-webkit-appearance:none;position:relative;">' +
+    '<button type="button" id="colorPickerBtn" onclick="window.openColorPicker()" style="width:100%;padding:11px 40px 11px 14px;border:1.5px solid #E0CC80;border-radius:10px;font-size:14px;background:#FFFEF5;color:#1A1400;font-family:inherit;text-align:left;cursor:pointer;display:flex;align-items:center;gap:8px;-webkit-appearance:none;">' +
       '<span id="colorPickerSwatch" style="width:14px;height:14px;border-radius:50%;border:1px solid #CCC;flex-shrink:0;display:none;"></span>' +
-      '<span id="colorPickerLabel" style="flex:1;color:#C0A860;">— Select color —</span>' +
+      '<span id="colorPickerLabel" style="flex:1;">— Select color —</span>' +
       '<i class="ti ti-chevron-down" style="color:#C8A532;font-size:14px;position:absolute;right:12px;"></i>' +
     '</button>' +
     '<input type="hidden" id="vColor" />' +
-    '<button class="save-custom-btn" onclick="window.saveCustomColor()" title="Save color" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);"><i class="ti ti-plus"></i></button>';
+    '<button class="save-custom-btn" onclick="window.saveCustomColor()" title="Save color" style="position:absolute;right:36px;top:50%;transform:translateY(-50%);"><i class="ti ti-plus"></i></button>';
   wrap.style.position = 'relative';
 }
 
@@ -1175,6 +1134,8 @@ window._colorOptions = [];
 window.openColorPicker = function() {
   var overlay = document.getElementById('colorPickerOverlay');
   if (overlay) { overlay.style.display = 'flex'; return; }
+
+  // Build overlay
   overlay = document.createElement('div');
   overlay.id = 'colorPickerOverlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:2000;display:flex;align-items:flex-end;justify-content:center;';
@@ -1184,6 +1145,7 @@ window.openColorPicker = function() {
   title.style.cssText = 'font-size:15px;font-weight:600;color:#1A1400;margin-bottom:1rem;';
   title.textContent = 'Select Color';
   sheet.appendChild(title);
+
   window._colorOptions.forEach(function(color) {
     var btn = document.createElement('button');
     btn.type = 'button';
@@ -1191,11 +1153,15 @@ window.openColorPicker = function() {
     var cssColor = COLOR_MAP[color] || '#999';
     var border = (color==='White'||color==='Beige'||color==='Silver') ? '#CCC' : cssColor;
     btn.innerHTML = '<span style="width:18px;height:18px;border-radius:50%;background:' + cssColor + ';border:1.5px solid ' + border + ';flex-shrink:0;"></span>' + color;
-    btn.addEventListener('click', function() { window.setColor(color); overlay.style.display = 'none'; });
+    btn.addEventListener('click', function() {
+      window.setColor(color);
+      overlay.style.display = 'none';
+    });
     btn.addEventListener('mouseenter', function(){ btn.style.background = '#F5ECC0'; });
     btn.addEventListener('mouseleave', function(){ btn.style.background = 'transparent'; });
     sheet.appendChild(btn);
   });
+
   overlay.appendChild(sheet);
   overlay.addEventListener('click', function(e){ if(e.target===overlay) overlay.style.display='none'; });
   document.body.appendChild(overlay);
@@ -1205,298 +1171,181 @@ window.setColor = function(color) {
   document.getElementById('vColor').value = color;
   var label = document.getElementById('colorPickerLabel');
   var swatch = document.getElementById('colorPickerSwatch');
-  if (label) { label.textContent = color || '— Select color —'; label.style.color = color ? '#1A1400' : '#C0A860'; }
+  if (label) label.textContent = color || '— Select color —';
   if (swatch) {
     var c = COLOR_MAP[color];
-    if (c) { var border = (color==='White'||color==='Beige'||color==='Silver') ? '#CCC' : c; swatch.style.background = c; swatch.style.borderColor = border; swatch.style.display = 'inline-block'; }
-    else { swatch.style.display = 'none'; }
+    if (c) {
+      var border = (color==='White'||color==='Beige'||color==='Silver') ? '#CCC' : c;
+      swatch.style.background = c;
+      swatch.style.borderColor = border;
+      swatch.style.display = 'inline-block';
+    } else { swatch.style.display = 'none'; }
   }
+  // Handle Other
   var customWrap = document.getElementById('customColorWrap');
   if (customWrap) customWrap.style.display = (color === 'Other') ? 'block' : 'none';
 };
 
-function populateColors(colors) {
-  var allColors = colors.filter(function(c){ return c !== 'Other'; }).concat(['Other']);
-  window._colorOptions = allColors;
-  var overlay = document.getElementById('colorPickerOverlay');
-  if (overlay) overlay.remove();
-  if (!isMobile) buildDesktopColorMenu(allColors);
+// ── Year dropdown (same pattern/CSS as the color dropdown) ──
+function buildYearOptions() {
+  var currentYear = new Date().getFullYear();
+  var years = [];
+  for (var y = currentYear + 1; y >= 1980; y--) years.push(String(y));
+  years.push('Other');
+  return years;
 }
+window._yearOptions = [];
 
-// ═══════════════════════════════════════════════
-// ── Universal Custom Select System ──
-// ═══════════════════════════════════════════════
-var _csOpenId = null;
-
-function csCloseAll(exceptId) {
-  ['nature','year','make','model','color'].forEach(function(id) {
-    if (id === exceptId) return;
-    var menu = document.getElementById(id + 'Menu');
-    var btn  = document.getElementById(id + 'Btn');
-    if (menu) menu.classList.remove('open');
-    if (btn)  btn.classList.remove('open');
+// Desktop: custom dropdown menu (reuses .color-dropdown-menu / .color-option CSS)
+function buildYearDropdownMenu(years) {
+  var menu = document.getElementById('yearDropdownMenu');
+  if (!menu) return;
+  menu.innerHTML = '';
+  years.forEach(function(y) {
+    var opt = document.createElement('div');
+    opt.className = 'color-option';
+    opt.dataset.value = y;
+    opt.textContent = y;
+    opt.addEventListener('click', function() { window.selectYear(y); });
+    menu.appendChild(opt);
   });
 }
 
-window.csToggle = function(id) {
-  var menu = document.getElementById(id + 'Menu');
-  var btn  = document.getElementById(id + 'Btn');
-  if (!menu || !btn || btn.classList.contains('disabled')) return;
+window.toggleYearDropdown = function() {
+  var btn = document.getElementById('yearDropdownBtn');
+  var menu = document.getElementById('yearDropdownMenu');
+  if (!btn || !menu) return;
   var isOpen = menu.classList.contains('open');
-  csCloseAll(id);
-  if (!isOpen) {
+  if (isOpen) {
+    menu.classList.remove('open');
+    btn.classList.remove('open');
+  } else {
     menu.classList.add('open');
     btn.classList.add('open');
-    _csOpenId = id;
     setTimeout(function() {
       document.addEventListener('click', function handler(e) {
-        var wrap = document.getElementById(id + 'Wrap') || (menu && menu.closest('.custom-select-wrap'));
-        if (wrap && !wrap.contains(e.target)) {
+        if (!document.getElementById('yearDropdown').contains(e.target)) {
           menu.classList.remove('open');
           btn.classList.remove('open');
           document.removeEventListener('click', handler);
-          _csOpenId = null;
         }
       });
     }, 0);
   }
 };
 
-window.csSelect = function(id, value, label) {
-  var inputId = { nature:'natureType', year:'vYear', make:'vMake', model:'vModel', color:'vColor' };
-  var input  = document.getElementById(inputId[id] || id);
-  var btnLbl = document.getElementById(id + 'BtnLabel');
-  var menu   = document.getElementById(id + 'Menu');
-  var btn    = document.getElementById(id + 'Btn');
-
-  if (input)  input.value = value;
-  if (btnLbl) { btnLbl.textContent = label; btnLbl.classList.remove('placeholder'); }
-  if (menu)   { menu.querySelectorAll('.cs-option').forEach(function(o){ o.classList.toggle('selected', o.dataset.value === value); }); menu.classList.remove('open'); }
-  if (btn)    btn.classList.remove('open');
-
-  // Show color dot in button
-  if (id === 'color') {
-    var dot = document.getElementById('colorDot');
-    if (dot) {
-      var c = COLOR_MAP[value];
-      if (c) {
-        dot.style.background = c;
-        dot.style.borderColor = (value==='White'||value==='Beige'||value==='Silver') ? '#CCC' : 'rgba(0,0,0,0.1)';
-        dot.style.display = 'inline-block';
-      } else { dot.style.display = 'none'; }
-    }
-  }
-
-  // Trigger downstream handlers
-  if (id === 'nature') window.onNatureChange();
-  if (id === 'make')   window.onMakeChange();
-  if (id === 'model')  window.onModelChange();
-  if (id === 'color')  window.onColorChange();
-};
-
-window.csReset = function(id) {
-  var placeholders = { nature: '— Select type —', year: '— Year —', make: '— Select make —', model: '— Select model —', color: '— Select color —' };
-  var inputId = { nature:'natureType', year:'vYear', make:'vMake', model:'vModel', color:'vColor' };
-  var input  = document.getElementById(inputId[id]);
-  var btnLbl = document.getElementById(id + 'BtnLabel');
-  var menu   = document.getElementById(id + 'Menu');
-  var btn    = document.getElementById(id + 'Btn');
-  if (input)  input.value = '';
-  if (btnLbl) { btnLbl.textContent = placeholders[id]; btnLbl.classList.add('placeholder'); }
-  if (menu)   { menu.querySelectorAll('.cs-option').forEach(function(o){ o.classList.remove('selected'); }); menu.classList.remove('open'); }
-  if (btn)    btn.classList.remove('open');
-  if (id === 'color') { var dot = document.getElementById('colorDot'); if (dot) dot.style.display = 'none'; }
-};
-
-// ── Populate year menu ──
-function populateYears() {
-  var menu = document.getElementById('yearMenu');
-  if (!menu) return;
-  menu.innerHTML = '';
-  var currentYear = new Date().getFullYear();
-  for (var y = currentYear + 1; y >= 1980; y--) {
-    (function(year) {
-      var opt = document.createElement('div');
-      opt.className = 'cs-option';
-      opt.dataset.value = year;
-      opt.textContent = year;
-      opt.onclick = function() { window.csSelect('year', String(year), String(year)); };
-      menu.appendChild(opt);
-    })(y);
-  }
-}
-
-// ── Populate make menu ──
-function populateMakes(makesObj) {
-  var menu = document.getElementById('makeMenu');
-  if (!menu) return;
-  menu.innerHTML = '';
-  var makes = Object.keys(makesObj).sort().filter(function(m){ return m !== 'Other'; });
-  makes.concat(['Other']).forEach(function(make) {
-    var opt = document.createElement('div');
-    opt.className = 'cs-option';
-    opt.dataset.value = make;
-    opt.textContent = make;
-    opt.onclick = function() { window.csSelect('make', make, make); };
-    menu.appendChild(opt);
+window.selectYear = function(year) {
+  document.getElementById('vYear').value = year;
+  var label = document.getElementById('yearDropdownLabel');
+  var btn = document.getElementById('yearDropdownBtn');
+  var menu = document.getElementById('yearDropdownMenu');
+  if (label) label.textContent = year || '— Select year —';
+  if (menu) menu.querySelectorAll('.color-option').forEach(function(o){
+    o.classList.toggle('selected', o.dataset.value === year);
   });
+  if (btn) btn.classList.remove('open');
+  if (menu) menu.classList.remove('open');
+  var customWrap = document.getElementById('customYearWrap');
+  if (customWrap) customWrap.style.display = (year === 'Other') ? 'block' : 'none';
+};
+
+// Mobile: bottom-sheet overlay (same pattern as the color picker)
+function buildYearSelect(wrap) {
+  wrap.innerHTML =
+    '<button type="button" id="yearPickerBtn" onclick="window.openYearPicker()" style="width:100%;padding:11px 40px 11px 14px;border:1.5px solid #E0CC80;border-radius:10px;font-size:14px;background:#FFFEF5;color:#1A1400;font-family:inherit;text-align:left;cursor:pointer;display:flex;align-items:center;gap:8px;-webkit-appearance:none;">' +
+      '<span id="yearPickerLabel" style="flex:1;">— Select year —</span>' +
+      '<i class="ti ti-chevron-down" style="color:#C8A532;font-size:14px;position:absolute;right:12px;"></i>' +
+    '</button>' +
+    '<input type="hidden" id="vYear" />';
+  wrap.style.position = 'relative';
 }
 
-// ── Populate model menu ──
-function populateModels(models) {
-  var menu  = document.getElementById('modelMenu');
-  var btn   = document.getElementById('modelBtn');
-  if (!menu) return;
-  menu.innerHTML = '';
-  var enabled = models && models.length > 0;
-  if (btn) { btn.classList.toggle('disabled', !enabled); }
-  if (!enabled) { window.csReset('model'); return; }
-  var filtered = models.filter(function(m){ return m !== 'Other'; });
-  filtered.concat(['Other']).forEach(function(model) {
-    var opt = document.createElement('div');
-    opt.className = 'cs-option';
-    opt.dataset.value = model;
-    opt.textContent = model;
-    opt.onclick = function() { window.csSelect('model', model, model); };
-    menu.appendChild(opt);
-  });
-}
+window.openYearPicker = function() {
+  var overlay = document.getElementById('yearPickerOverlay');
+  if (overlay) { overlay.style.display = 'flex'; return; }
 
-// ── On make selected → load models ──
-window.onMakeChange = function() {
-  var make = document.getElementById('vMake').value;
-  var customWrap = document.getElementById('customMakeWrap');
-  if (customWrap) customWrap.style.display = (make === 'Other') ? 'block' : 'none';
-  if (make === 'Other') { updateMakeLogo(''); window.csReset('model'); return; }
-  updateMakeLogo(make);
-  window.csReset('model');
-  if (!make || !window.makesData[make]) return;
-  var models = window.makesData[make];
-  if (models.models) models = models.models;
-  if (!Array.isArray(models)) return;
-  populateModels(models);
-};
+  overlay = document.createElement('div');
+  overlay.id = 'yearPickerOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:2000;display:flex;align-items:flex-end;justify-content:center;';
+  var sheet = document.createElement('div');
+  sheet.style.cssText = 'background:#FDFBF0;width:100%;max-width:480px;border-radius:18px 18px 0 0;padding:1.25rem;max-height:70vh;overflow-y:auto;';
+  var title = document.createElement('div');
+  title.style.cssText = 'font-size:15px;font-weight:600;color:#1A1400;margin-bottom:1rem;';
+  title.textContent = 'Select Year';
+  sheet.appendChild(title);
 
-window.onModelChange = function() {
-  var model = document.getElementById('vModel') ? document.getElementById('vModel').value : '';
-  var customWrap = document.getElementById('customModelWrap');
-  if (customWrap) customWrap.style.display = (model === 'Other') ? 'block' : 'none';
-};
-
-window.onModelInputChange = window.onModelChange;
-window.onMakeInput = window.onMakeChange;
-
-// ── Clear make + model ──
-window.clearMake = function() {
-  window.csReset('make');
-  window.csReset('model');
-  document.getElementById('customMakeWrap') && (document.getElementById('customMakeWrap').style.display = 'none');
-  updateMakeLogo('');
-};
-
-// ── Color change handler ──
-window.onColorChange = function() {
-  var color = document.getElementById('vColor') ? document.getElementById('vColor').value : '';
-  var customWrap = document.getElementById('customColorWrap');
-  if (customWrap) customWrap.style.display = (color === 'Other') ? 'block' : 'none';
-  // Update color button dot if custom picker
-  if (typeof window.setColor === 'function') window.setColor(color);
-};
-
-// ── Coverage area checker ──
-// ── Coverage area checker — uses actual map polygons from Google My Maps ──
-var coverageLoaded = false;
-var coveragePolygons = { primary: [], secondary: [] };
-
-async function loadCoverageMap() {
-  try {
-    var kmlUrl = 'https://www.google.com/maps/d/kml?mid=1CTAa9fLZi01zzffGhkiMOkkSrN8aPw0&forcekml=1';
-    var proxyUrl = 'https://cobc.shmueleidelman-work.workers.dev/proxy/kml?url=' + encodeURIComponent(kmlUrl);
-    var resp = await fetch(proxyUrl);
-    if (!resp.ok) throw new Error('KML ' + resp.status);
-    var text = await resp.text();
-    parseKML(text);
-    console.log('Coverage zones loaded — primary:', coveragePolygons.primary.length, 'secondary:', coveragePolygons.secondary.length);
-  } catch(e) {
-    console.warn('Coverage map load failed:', e.message);
-  }
-  coverageLoaded = true;
-}
-
-function parseKML(kmlText) {
-  var parser = new DOMParser();
-  var doc = parser.parseFromString(kmlText, 'text/xml');
-  doc.querySelectorAll('Placemark').forEach(function(pm) {
-    var name = ((pm.querySelector('name') || {}).textContent || '').toLowerCase();
-    pm.querySelectorAll('coordinates').forEach(function(coordsEl) {
-      var coords = coordsEl.textContent.trim().split(/\s+/).map(function(c) {
-        var p = c.split(',');
-        return { lat: parseFloat(p[1]), lng: parseFloat(p[0]) };
-      }).filter(function(c) { return !isNaN(c.lat) && !isNaN(c.lng); });
-      if (coords.length < 3) return;
-      if (name.indexOf('primary') !== -1) coveragePolygons.primary.push(coords);
-      else if (name.indexOf('secondary') !== -1) coveragePolygons.secondary.push(coords);
+  window._yearOptions.forEach(function(year) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.style.cssText = 'display:flex;align-items:center;width:100%;padding:10px 12px;border:none;background:transparent;font-size:15px;color:#1A1400;font-family:inherit;cursor:pointer;border-radius:8px;text-align:left;';
+    btn.textContent = year;
+    btn.addEventListener('click', function() {
+      window.setYear(year);
+      overlay.style.display = 'none';
     });
+    btn.addEventListener('mouseenter', function(){ btn.style.background = '#F5ECC0'; });
+    btn.addEventListener('mouseleave', function(){ btn.style.background = 'transparent'; });
+    sheet.appendChild(btn);
   });
-}
 
-// Ray-casting point-in-polygon algorithm
-function pointInPolygon(lat, lng, polygon) {
-  var inside = false;
-  for (var i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    var xi = polygon[i].lat, yi = polygon[i].lng;
-    var xj = polygon[j].lat, yj = polygon[j].lng;
-    if (((yi > lng) !== (yj > lng)) && (lat < (xj - xi) * (lng - yi) / (yj - yi) + xi)) {
-      inside = !inside;
-    }
-  }
-  return inside;
-}
-
-function checkCoverageArea(lat, lng) {
-  for (var i = 0; i < coveragePolygons.primary.length; i++) {
-    if (pointInPolygon(lat, lng, coveragePolygons.primary[i])) return 'primary';
-  }
-  for (var i = 0; i < coveragePolygons.secondary.length; i++) {
-    if (pointInPolygon(lat, lng, coveragePolygons.secondary[i])) return 'secondary';
-  }
-  return 'outside';
-}
-
-window.showAreaIndicator = async function(lat, lng) {
-  var indicator = document.getElementById('areaIndicator');
-  var badge = document.getElementById('areaBadge');
-  if (!indicator || !badge) return;
-  indicator.style.display = 'block';
-  badge.className = 'area-badge checking';
-  badge.innerHTML = '<i class="ti ti-loader" style="font-size:13px;"></i> Checking coverage...';
-
-  // Wait up to 5s for KML to load
-  var waited = 0;
-  while (!coverageLoaded && waited < 5000) {
-    await new Promise(function(r){ setTimeout(r, 200); });
-    waited += 200;
-  }
-
-  var area = checkCoverageArea(lat, lng);
-  if (area === 'primary') {
-    badge.className = 'area-badge primary';
-    badge.innerHTML = '<i class="ti ti-circle-check" style="font-size:14px;"></i> Primary Coverage Area';
-  } else if (area === 'secondary') {
-    badge.className = 'area-badge secondary';
-    badge.innerHTML = '<i class="ti ti-circle-check" style="font-size:14px;"></i> Secondary Coverage Area';
-  } else {
-    badge.className = 'area-badge outside';
-    badge.innerHTML = '<i class="ti ti-alert-circle" style="font-size:14px;"></i> Outside Coverage Area';
-  }
+  overlay.appendChild(sheet);
+  overlay.addEventListener('click', function(e){ if(e.target===overlay) overlay.style.display='none'; });
+  document.body.appendChild(overlay);
 };
 
-loadCoverageMap();
+window.setYear = function(year) {
+  document.getElementById('vYear').value = year;
+  var label = document.getElementById('yearPickerLabel');
+  if (label) label.textContent = year || '— Select year —';
+  var customWrap = document.getElementById('customYearWrap');
+  if (customWrap) customWrap.style.display = (year === 'Other') ? 'block' : 'none';
+};
 
-// ── Detect mobile ──
+// Build the year picker UI for the current device, and reset it to blank
+function buildYearUI() {
+  var yearWrap = document.getElementById('yearInputWrap');
+  if (!yearWrap) return;
+  var years = buildYearOptions();
+  window._yearOptions = years;
+
+  if (isMobile) {
+    buildYearSelect(yearWrap);
+  } else {
+    yearWrap.innerHTML =
+      '<div class="color-dropdown" id="yearDropdown">' +
+        '<input type="hidden" id="vYear" />' +
+        '<button type="button" class="color-dropdown-btn" id="yearDropdownBtn" onclick="window.toggleYearDropdown()">' +
+          '<span id="yearDropdownLabel">— Select year —</span>' +
+          '<i class="ti ti-chevron-down chevron"></i>' +
+        '</button>' +
+        '<div class="color-dropdown-menu" id="yearDropdownMenu"></div>' +
+      '</div>';
+    buildYearDropdownMenu(years);
+  }
+}
+
+window.resetYearUI = function() {
+  var el = document.getElementById('vYear');
+  if (el) el.value = '';
+  if (isMobile) {
+    var lbl = document.getElementById('yearPickerLabel');
+    if (lbl) lbl.textContent = '— Select year —';
+  } else {
+    var lbl2 = document.getElementById('yearDropdownLabel');
+    if (lbl2) lbl2.textContent = '— Select year —';
+    var menu = document.getElementById('yearDropdownMenu');
+    if (menu) menu.querySelectorAll('.color-option').forEach(function(o){ o.classList.remove('selected'); });
+  }
+  var customWrap = document.getElementById('customYearWrap');
+  if (customWrap) customWrap.style.display = 'none';
+  var customYear = document.getElementById('customYear');
+  if (customYear) customYear.value = '';
+};
+
+// ── Detect mobile (touch device) ──
 var isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
-// ── Build make/model UI based on device ──
+// ── Build make/model UI based on device (same dropdown pattern as color/year) ──
 function buildMakeModelUI() {
   var makeWrap  = document.getElementById('makeInputWrap');
   var modelWrap = document.getElementById('modelInputWrap');
@@ -1507,68 +1356,70 @@ function buildMakeModelUI() {
     if (colorWrap) buildColorSelect([], colorWrap);
 
     makeWrap.innerHTML =
-      '<div class="custom-select-wrap" id="makeWrap" style="flex:1;">' +
-        '<button type="button" class="custom-select-btn has-save-pad" id="makeBtn" onclick="window.csToggle(\'make\')">' +
-          '<span class="cs-label placeholder" id="makeBtnLabel">— Select make —</span>' +
-          '<span class="cs-chevron"><i class="ti ti-chevron-down"></i></span>' +
-        '</button>' +
-        '<input type="hidden" id="vMake" />' +
-        '<div class="custom-select-menu" id="makeMenu"></div>' +
-      '</div>' +
+      '<button type="button" id="makePickerBtn" onclick="window.openMakePicker()" style="width:100%;padding:11px 76px 11px 14px;border:1.5px solid #E0CC80;border-radius:10px;font-size:14px;background:#FFFEF5;color:#1A1400;font-family:inherit;text-align:left;cursor:pointer;display:flex;align-items:center;-webkit-appearance:none;">' +
+        '<span id="makePickerLabel" style="flex:1;">— Select make —</span>' +
+        '<i class="ti ti-chevron-down" style="color:#C8A532;font-size:14px;position:absolute;right:44px;"></i>' +
+      '</button>' +
+      '<input type="hidden" id="vMake" />' +
+      '<button class="field-clear" onclick="window.clearMake()" tabindex="-1">&times;</button>' +
       '<button class="save-custom-btn" onclick="window.saveCustomMake()" title="Save make"><i class="ti ti-plus"></i></button>';
+    makeWrap.style.position = 'relative';
 
     modelWrap.innerHTML =
-      '<div class="custom-select-wrap" id="modelWrap" style="flex:1;">' +
-        '<button type="button" class="custom-select-btn disabled has-save-pad" id="modelBtn" onclick="window.csToggle(\'model\')">' +
-          '<span class="cs-label placeholder" id="modelBtnLabel">— Select model —</span>' +
-          '<span class="cs-chevron"><i class="ti ti-chevron-down"></i></span>' +
-        '</button>' +
-        '<input type="hidden" id="vModel" />' +
-        '<div class="custom-select-menu" id="modelMenu"></div>' +
-      '</div>' +
+      '<button type="button" id="modelPickerBtn" onclick="window.openModelPicker()" style="width:100%;padding:11px 76px 11px 14px;border:1.5px solid #E0CC80;border-radius:10px;font-size:14px;background:#FFFEF5;color:#1A1400;font-family:inherit;text-align:left;cursor:pointer;display:flex;align-items:center;-webkit-appearance:none;opacity:0.5;">' +
+        '<span id="modelPickerLabel" style="flex:1;">— Select model —</span>' +
+        '<i class="ti ti-chevron-down" style="color:#C8A532;font-size:14px;position:absolute;right:44px;"></i>' +
+      '</button>' +
+      '<input type="hidden" id="vModel" />' +
+      '<button class="field-clear" onclick="window.clearModel()" tabindex="-1">&times;</button>' +
       '<button class="save-custom-btn" onclick="window.saveCustomModel()" title="Save model"><i class="ti ti-plus"></i></button>';
+    modelWrap.style.position = 'relative';
   } else {
-    // Desktop: custom color dropdown with swatches, make/model as datalist
+    // Desktop: custom dropdown with swatches for color, plain custom dropdowns for make/model
     if (colorWrap) {
       colorWrap.innerHTML =
-        '<div class="custom-select-wrap" id="colorWrap">' +
-          '<button type="button" class="custom-select-btn" id="colorBtn" onclick="window.csToggle(\'color\')">' +
-            '<span id="colorDot" class="color-dot" style="display:none;"></span>' +
-            '<span class="cs-label placeholder" id="colorBtnLabel">— Select color —</span>' +
-            '<span class="cs-chevron"><i class="ti ti-chevron-down"></i></span>' +
-          '</button>' +
+        '<div class="color-dropdown" id="colorDropdown">' +
           '<input type="hidden" id="vColor" />' +
-          '<div class="custom-select-menu" id="colorMenu"></div>' +
+          '<button type="button" class="color-dropdown-btn" id="colorDropdownBtn" onclick="window.toggleColorDropdown()">' +
+            '<span class="color-dot" id="colorDot" style="display:none;"></span>' +
+            '<span id="colorDropdownLabel">— Select color —</span>' +
+            '<i class="ti ti-chevron-down chevron"></i>' +
+          '</button>' +
+          '<div class="color-dropdown-menu" id="colorDropdownMenu"></div>' +
         '</div>' +
         '<button class="save-custom-btn" onclick="window.saveCustomColor()" title="Save color" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);"><i class="ti ti-plus"></i></button>';
       colorWrap.style.position = 'relative';
     }
 
     makeWrap.innerHTML =
-      '<div class="custom-select-wrap" id="makeWrap" style="flex:1;">' +
-        '<button type="button" class="custom-select-btn has-save-pad" id="makeBtn" onclick="window.csToggle(\'make\')">' +
-          '<span class="cs-label placeholder" id="makeBtnLabel">— Select make —</span>' +
-          '<span class="cs-chevron"><i class="ti ti-chevron-down"></i></span>' +
-        '</button>' +
+      '<div class="color-dropdown" id="makeDropdown" style="flex:1;">' +
         '<input type="hidden" id="vMake" />' +
-        '<div class="custom-select-menu" id="makeMenu"></div>' +
+        '<button type="button" class="color-dropdown-btn" id="makeDropdownBtn" onclick="window.toggleMakeDropdown()" style="padding-right:96px;">' +
+          '<span id="makeDropdownLabel">— Select make —</span>' +
+          '<i class="ti ti-chevron-down chevron" style="right:78px;"></i>' +
+        '</button>' +
+        '<div class="color-dropdown-menu" id="makeDropdownMenu"></div>' +
       '</div>' +
+      '<button class="field-clear" onclick="window.clearMake()" tabindex="-1">&times;</button>' +
       '<button class="save-custom-btn" onclick="window.saveCustomMake()" title="Save make"><i class="ti ti-plus"></i></button>';
+    makeWrap.style.position = 'relative';
 
     modelWrap.innerHTML =
-      '<div class="custom-select-wrap" id="modelWrap" style="flex:1;">' +
-        '<button type="button" class="custom-select-btn disabled has-save-pad" id="modelBtn" onclick="window.csToggle(\'model\')">' +
-          '<span class="cs-label placeholder" id="modelBtnLabel">— Select model —</span>' +
-          '<span class="cs-chevron"><i class="ti ti-chevron-down"></i></span>' +
-        '</button>' +
+      '<div class="color-dropdown" id="modelDropdown" style="flex:1;">' +
         '<input type="hidden" id="vModel" />' +
-        '<div class="custom-select-menu" id="modelMenu"></div>' +
+        '<button type="button" class="color-dropdown-btn" id="modelDropdownBtn" onclick="window.toggleModelDropdown()" style="padding-right:96px;opacity:0.5;cursor:not-allowed;">' +
+          '<span id="modelDropdownLabel">— Select model —</span>' +
+          '<i class="ti ti-chevron-down chevron" style="right:78px;"></i>' +
+        '</button>' +
+        '<div class="color-dropdown-menu" id="modelDropdownMenu"></div>' +
       '</div>' +
+      '<button class="field-clear" onclick="window.clearModel()" tabindex="-1">&times;</button>' +
       '<button class="save-custom-btn" onclick="window.saveCustomModel()" title="Save model"><i class="ti ti-plus"></i></button>';
+    modelWrap.style.position = 'relative';
   }
 }
 buildMakeModelUI();
-populateYears();
+buildYearUI();
 
 // ── Populate make ──
 var MAKE_LOGOS = {
@@ -1623,6 +1474,276 @@ function updateMakeLogo(make) {
   }
 }
 
+// ── Make dropdown — same pattern as color/year ──
+window._makeOptions = [];
+
+function buildMakeDropdownMenu(makes) {
+  var menu = document.getElementById('makeDropdownMenu');
+  if (!menu) return;
+  menu.innerHTML = '';
+  makes.forEach(function(m) {
+    var opt = document.createElement('div');
+    opt.className = 'color-option';
+    opt.dataset.value = m;
+    opt.textContent = m;
+    opt.addEventListener('click', function() { window.selectMake(m); });
+    menu.appendChild(opt);
+  });
+}
+
+window.toggleMakeDropdown = function() {
+  var btn = document.getElementById('makeDropdownBtn');
+  var menu = document.getElementById('makeDropdownMenu');
+  if (!btn || !menu) return;
+  var isOpen = menu.classList.contains('open');
+  if (isOpen) {
+    menu.classList.remove('open');
+    btn.classList.remove('open');
+  } else {
+    menu.classList.add('open');
+    btn.classList.add('open');
+    setTimeout(function() {
+      document.addEventListener('click', function handler(e) {
+        if (!document.getElementById('makeDropdown').contains(e.target)) {
+          menu.classList.remove('open');
+          btn.classList.remove('open');
+          document.removeEventListener('click', handler);
+        }
+      });
+    }, 0);
+  }
+};
+
+window.openMakePicker = function() {
+  var overlay = document.getElementById('makePickerOverlay');
+  if (overlay) { overlay.style.display = 'flex'; return; }
+
+  overlay = document.createElement('div');
+  overlay.id = 'makePickerOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:2000;display:flex;align-items:flex-end;justify-content:center;';
+  var sheet = document.createElement('div');
+  sheet.style.cssText = 'background:#FDFBF0;width:100%;max-width:480px;border-radius:18px 18px 0 0;padding:1.25rem;max-height:70vh;overflow-y:auto;';
+  var title = document.createElement('div');
+  title.style.cssText = 'font-size:15px;font-weight:600;color:#1A1400;margin-bottom:1rem;';
+  title.textContent = 'Select Make';
+  sheet.appendChild(title);
+
+  window._makeOptions.forEach(function(make) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.style.cssText = 'display:flex;align-items:center;width:100%;padding:10px 12px;border:none;background:transparent;font-size:15px;color:#1A1400;font-family:inherit;cursor:pointer;border-radius:8px;text-align:left;';
+    btn.textContent = make;
+    btn.addEventListener('click', function() {
+      window.selectMake(make);
+      overlay.style.display = 'none';
+    });
+    btn.addEventListener('mouseenter', function(){ btn.style.background = '#F5ECC0'; });
+    btn.addEventListener('mouseleave', function(){ btn.style.background = 'transparent'; });
+    sheet.appendChild(btn);
+  });
+
+  overlay.appendChild(sheet);
+  overlay.addEventListener('click', function(e){ if(e.target===overlay) overlay.style.display='none'; });
+  document.body.appendChild(overlay);
+};
+
+// ── Model dropdown — same pattern, disabled until a make is chosen ──
+window._modelOptions = [];
+window._modelEnabled = false;
+
+function buildModelDropdownMenu(models) {
+  var menu = document.getElementById('modelDropdownMenu');
+  if (!menu) return;
+  menu.innerHTML = '';
+  models.forEach(function(m) {
+    var opt = document.createElement('div');
+    opt.className = 'color-option';
+    opt.dataset.value = m;
+    opt.textContent = m;
+    opt.addEventListener('click', function() { window.selectModel(m); });
+    menu.appendChild(opt);
+  });
+}
+
+function populateModelOptions(models) {
+  var withOther = (models && models.length) ? models.filter(function(m){ return m !== 'Other'; }).concat(['Other']) : [];
+  window._modelOptions = withOther;
+  window._modelEnabled = withOther.length > 0;
+
+  var btn = document.getElementById(isMobile ? 'modelPickerBtn' : 'modelDropdownBtn');
+  if (btn) {
+    btn.style.opacity = window._modelEnabled ? '' : '0.5';
+    btn.style.cursor = window._modelEnabled ? 'pointer' : 'not-allowed';
+  }
+  if (!isMobile) buildModelDropdownMenu(withOther);
+}
+
+window.toggleModelDropdown = function() {
+  if (!window._modelEnabled) { showToast('Select a make first'); return; }
+  var btn = document.getElementById('modelDropdownBtn');
+  var menu = document.getElementById('modelDropdownMenu');
+  if (!btn || !menu) return;
+  var isOpen = menu.classList.contains('open');
+  if (isOpen) {
+    menu.classList.remove('open');
+    btn.classList.remove('open');
+  } else {
+    menu.classList.add('open');
+    btn.classList.add('open');
+    setTimeout(function() {
+      document.addEventListener('click', function handler(e) {
+        if (!document.getElementById('modelDropdown').contains(e.target)) {
+          menu.classList.remove('open');
+          btn.classList.remove('open');
+          document.removeEventListener('click', handler);
+        }
+      });
+    }, 0);
+  }
+};
+
+window.openModelPicker = function() {
+  if (!window._modelEnabled) { showToast('Select a make first'); return; }
+  var overlay = document.getElementById('modelPickerOverlay');
+  if (overlay) { overlay.style.display = 'flex'; return; }
+
+  overlay = document.createElement('div');
+  overlay.id = 'modelPickerOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:2000;display:flex;align-items:flex-end;justify-content:center;';
+  var sheet = document.createElement('div');
+  sheet.style.cssText = 'background:#FDFBF0;width:100%;max-width:480px;border-radius:18px 18px 0 0;padding:1.25rem;max-height:70vh;overflow-y:auto;';
+  var title = document.createElement('div');
+  title.style.cssText = 'font-size:15px;font-weight:600;color:#1A1400;margin-bottom:1rem;';
+  title.textContent = 'Select Model';
+  sheet.appendChild(title);
+
+  window._modelOptions.forEach(function(model) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.style.cssText = 'display:flex;align-items:center;width:100%;padding:10px 12px;border:none;background:transparent;font-size:15px;color:#1A1400;font-family:inherit;cursor:pointer;border-radius:8px;text-align:left;';
+    btn.textContent = model;
+    btn.addEventListener('click', function() {
+      window.selectModel(model);
+      overlay.style.display = 'none';
+    });
+    btn.addEventListener('mouseenter', function(){ btn.style.background = '#F5ECC0'; });
+    btn.addEventListener('mouseleave', function(){ btn.style.background = 'transparent'; });
+    sheet.appendChild(btn);
+  });
+
+  overlay.appendChild(sheet);
+  overlay.addEventListener('click', function(e){ if(e.target===overlay) overlay.style.display='none'; });
+  document.body.appendChild(overlay);
+};
+
+// ── Populate make dropdown/overlay options ──
+function populateMakes(makesObj) {
+  var makes = Object.keys(makesObj).sort();
+  var withOther = makes.filter(function(m){ return m !== 'Other'; }).concat(['Other']);
+  window._makeOptions = withOther;
+  if (!isMobile) buildMakeDropdownMenu(withOther);
+};
+
+// ── Select a make: updates label/menu, logo, and dependent model list ──
+window.selectMake = function(make) {
+  document.getElementById('vMake').value = make;
+  if (isMobile) {
+    var lbl = document.getElementById('makePickerLabel');
+    if (lbl) lbl.textContent = make || '— Select make —';
+  } else {
+    var lbl2 = document.getElementById('makeDropdownLabel');
+    if (lbl2) lbl2.textContent = make || '— Select make —';
+    var menu = document.getElementById('makeDropdownMenu');
+    if (menu) menu.querySelectorAll('.color-option').forEach(function(o){
+      o.classList.toggle('selected', o.dataset.value === make);
+    });
+    var btn = document.getElementById('makeDropdownBtn');
+    if (btn) btn.classList.remove('open');
+    if (menu) menu.classList.remove('open');
+  }
+
+  var customWrap = document.getElementById('customMakeWrap');
+  if (customWrap) customWrap.style.display = (make === 'Other') ? 'block' : 'none';
+  updateMakeLogo(make === 'Other' ? '' : make);
+
+  window.resetModelUI();
+  if (make && make !== 'Other' && window.makesData[make]) {
+    var models = window.makesData[make];
+    if (models.models) models = models.models;
+    if (Array.isArray(models)) { populateModelOptions(models); return; }
+  }
+  populateModelOptions([]);
+};
+
+// ── Select a model: updates label/menu ──
+window.selectModel = function(model) {
+  document.getElementById('vModel').value = model;
+  if (isMobile) {
+    var lbl = document.getElementById('modelPickerLabel');
+    if (lbl) lbl.textContent = model || '— Select model —';
+  } else {
+    var lbl2 = document.getElementById('modelDropdownLabel');
+    if (lbl2) lbl2.textContent = model || '— Select model —';
+    var menu = document.getElementById('modelDropdownMenu');
+    if (menu) menu.querySelectorAll('.color-option').forEach(function(o){
+      o.classList.toggle('selected', o.dataset.value === model);
+    });
+    var btn = document.getElementById('modelDropdownBtn');
+    if (btn) btn.classList.remove('open');
+    if (menu) menu.classList.remove('open');
+  }
+  var customWrap = document.getElementById('customModelWrap');
+  if (customWrap) customWrap.style.display = (model === 'Other') ? 'block' : 'none';
+};
+
+// ── Reset model UI back to blank/disabled (without touching make) ──
+window.resetModelUI = function() {
+  var el = document.getElementById('vModel');
+  if (el) el.value = '';
+  if (isMobile) {
+    var lbl = document.getElementById('modelPickerLabel');
+    if (lbl) lbl.textContent = '— Select model —';
+  } else {
+    var lbl2 = document.getElementById('modelDropdownLabel');
+    if (lbl2) lbl2.textContent = '— Select model —';
+    var menu = document.getElementById('modelDropdownMenu');
+    if (menu) menu.querySelectorAll('.color-option').forEach(function(o){ o.classList.remove('selected'); });
+  }
+  var customWrap = document.getElementById('customModelWrap');
+  if (customWrap) customWrap.style.display = 'none';
+  var customModel = document.getElementById('customModel');
+  if (customModel) customModel.value = '';
+};
+
+// ── Clear model only (field-clear × button) ──
+window.clearModel = function() {
+  window.resetModelUI();
+  populateModelOptions(window._modelEnabled ? window._modelOptions.filter(function(m){ return m !== 'Other'; }) : []);
+};
+
+// ── Clear make + model ──
+window.clearMake = function() {
+  var makeEl = document.getElementById('vMake');
+  if (makeEl) makeEl.value = '';
+  if (isMobile) {
+    var lbl = document.getElementById('makePickerLabel');
+    if (lbl) lbl.textContent = '— Select make —';
+  } else {
+    var lbl2 = document.getElementById('makeDropdownLabel');
+    if (lbl2) lbl2.textContent = '— Select make —';
+    var menu = document.getElementById('makeDropdownMenu');
+    if (menu) menu.querySelectorAll('.color-option').forEach(function(o){ o.classList.remove('selected'); });
+  }
+  var customMakeWrap = document.getElementById('customMakeWrap');
+  if (customMakeWrap) customMakeWrap.style.display = 'none';
+  var customMake = document.getElementById('customMake');
+  if (customMake) customMake.value = '';
+
+  window.resetModelUI();
+  populateModelOptions([]);
+  updateMakeLogo('');
+};
+
 // ── Save custom color ──
 window.saveCustomColor = async function() {
   var color = isMobile ? prompt('Enter color to save:') : document.getElementById('vColor').value.trim();
@@ -1646,6 +1767,10 @@ window.saveCustomColor = async function() {
 // ── Save custom make ──
 window.saveCustomMake = async function() {
   var make = document.getElementById('vMake').value.trim();
+  if (make === 'Other' || !make) {
+    var custom = document.getElementById('customMake');
+    make = custom ? custom.value.trim() : '';
+  }
   if (!make) { showToast('Type a make name first'); return; }
   try {
     const snap = await get(ref(db, 'makes'));
@@ -1655,18 +1780,26 @@ window.saveCustomMake = async function() {
     await set(ref(db, 'makes'), makes);
     window.makesData[make] = [];
     populateMakes(window.makesData);
+    window.selectMake(make);
     showToast('\u2713 Saved make "' + make + '"');
   } catch(e) { showToast('Could not save — check connection'); }
 };
 
 // ── Save custom model ──
 window.saveCustomModel = async function() {
-  var makeEl = document.getElementById('vMake');
-  var make = makeEl ? makeEl.value.trim() : '';
+  var make = document.getElementById('vMake').value.trim();
+  if (make === 'Other') {
+    var customMake = document.getElementById('customMake');
+    make = customMake ? customMake.value.trim() : '';
+  }
   if (!make) { showToast('Select a make first'); return; }
-  var model = isMobile ? prompt('Enter model name to save under ' + make + ':') : document.getElementById('vModel').value.trim();
-  if (!model || !model.trim()) { showToast('Enter a model name'); return; }
-  model = model.trim();
+
+  var model = document.getElementById('vModel').value.trim();
+  if (model === 'Other' || !model) {
+    var customModel = document.getElementById('customModel');
+    model = customModel ? customModel.value.trim() : '';
+  }
+  if (!model) { showToast('Enter a model name'); return; }
   try {
     const snap = await get(ref(db, 'makes/' + make));
     var models = snap.exists() ? snap.val() : [];
@@ -1678,8 +1811,8 @@ window.saveCustomModel = async function() {
     models.push(model); models.sort();
     await set(ref(db, 'makes/' + make), models);
     window.makesData[make] = models;
-    populateModels(models);
-    if (!isMobile) window.onMakeInput();
+    populateModelOptions(models);
+    window.selectModel(model);
     showToast('\u2713 Saved model "' + model + '"');
   } catch(e) { showToast('Could not save — check connection'); }
 };
@@ -1692,8 +1825,8 @@ window.toggleOtherVehicle = function() {
   document.getElementById('vehicleFields').classList.toggle('on', window.isOtherVehicle);
   if (!window.isOtherVehicle) {
     window.clearMake();
-    window.csReset('color');
-    window.csReset('year');
+    var colorEl = document.getElementById('vColor'); if (colorEl) colorEl.value = '';
+    if (window.resetYearUI) window.resetYearUI();
   }
 };
 
@@ -1708,7 +1841,7 @@ var VEHICLE_NATURES = ['flat_tire','boost','out_of_gas','lockout','vehicle_stall
 var QTY_NATURES = { heater: 'Heater units', ac: 'AC units' };
 
 window.onNatureChange = function() {
-  var val = document.getElementById('natureType') ? document.getElementById('natureType').value : '';
+  var val = document.getElementById('natureType').value;
   var isVeh = VEHICLE_NATURES.indexOf(val) !== -1;
 
   document.getElementById('vehicleFields').classList.toggle('on', isVeh);
@@ -1717,10 +1850,6 @@ window.onNatureChange = function() {
   var showTire = val === 'flat_tire';
   document.getElementById('tireOpts').style.display = showTire ? 'flex' : '';
   document.getElementById('tireOpts').classList.toggle('on', showTire);
-  if (!showTire) {
-    document.getElementById('ezSpareWrap').classList.remove('on');
-    window.ezSpareData = null;
-  }
 
   // Lockout type chips
   var showLock = val === 'lockout';
@@ -1800,18 +1929,7 @@ window.selectChip = function(evt, group, id, label) {
   parent.querySelectorAll('.chip').forEach(function(c){ c.classList.remove('selected'); });
   evt.target.classList.add('selected');
 
-  // EZ spare: show lookup panel + auto-trigger
-  if (group === 'spare') {
-    var ezWrap = document.getElementById('ezSpareWrap');
-    if (id === 'no_spare_needs_ez') {
-      ezWrap.classList.add('on');
-      window.lookupEzSpare();
-    } else {
-      ezWrap.classList.remove('on');
-      window.ezSpareData = null;
-      var tf = document.getElementById('trimField'); if (tf) tf.style.display = 'none';
-    }
-  }
+  // Lockout type: show/hide vehicle fields and house side chips
   if (group === 'lockout_type') {
     var isVehicle = (id === 'vehicle_lockout');
     var isHouse   = (id === 'house_lockout');
@@ -1819,10 +1937,9 @@ window.selectChip = function(evt, group, id, label) {
     // Vehicle fields
     document.getElementById('vehicleFields').classList.toggle('on', isVehicle);
     if (!isVehicle) {
-      window.csReset('color');
-      window.csReset('year');
+      var colorEl = document.getElementById('vColor'); if (colorEl) colorEl.value = '';
+      if (window.resetYearUI) window.resetYearUI();
       window.clearMake();
-      updateMakeLogo('');
     }
 
     // House interior/exterior chips
@@ -1843,11 +1960,11 @@ window.selectChip = function(evt, group, id, label) {
 
 // ── Build nature string ──
 function getNatureLabel() {
-  var val = document.getElementById('natureType') ? document.getElementById('natureType').value : '';
-  if (!val) return '';
-  if (val === 'other') return document.getElementById('customNature').value.trim() || 'Other';
-  var lbl = document.getElementById('natureBtnLabel');
-  return lbl ? lbl.textContent : val;
+  var sel = document.getElementById('natureType');
+  var opt = sel.options[sel.selectedIndex];
+  if (!opt || !opt.value) return '';
+  if (opt.value === 'other') return document.getElementById('customNature').value.trim() || 'Other';
+  return opt.text;
 }
 
 function buildNatureString() {
@@ -1856,10 +1973,12 @@ function buildNatureString() {
   var parts = [label];
 
   if (val === 'flat_tire' && window.chips['spare']) parts.push(window.chips['spare'].label);
-
   if (val === 'lockout') {
     var ltype = window.chips['lockout_type'];
-    if (ltype) parts[0] = ltype.id === 'vehicle_lockout' ? 'Car Lockout' : 'House Lockout';
+    if (ltype) {
+      // Replace the generic "Lockout" label with specific label
+      parts[0] = ltype.id === 'vehicle_lockout' ? 'Car Lockout' : 'House Lockout';
+    }
     if (window.chips['house_side']) parts.push(window.chips['house_side'].label);
   }
   if (val === 'flood') {
@@ -1872,6 +1991,7 @@ function buildNatureString() {
   }
   if (VEHICLE_NATURES.indexOf(val) !== -1 || (val === 'other' && window.isOtherVehicle)) {
     var yr   = document.getElementById('vYear') ? document.getElementById('vYear').value.trim() : '';
+    if (yr === 'Other') yr = (document.getElementById('customYear') ? document.getElementById('customYear').value.trim() : '') || 'Other';
     var colEl = document.getElementById('vColor');
     var col  = colEl ? colEl.value.trim() : '';
     if (col === 'Other') col = (document.getElementById('customColor') ? document.getElementById('customColor').value.trim() : '') || 'Other';
@@ -1881,11 +2001,7 @@ function buildNatureString() {
     var modelEl = document.getElementById('vModel');
     var model = modelEl ? modelEl.value.trim() : '';
     if (model === 'Other') model = (document.getElementById('customModel') ? document.getElementById('customModel').value.trim() : '') || 'Other';
-    // Include trim if set
-    var trimEl = document.getElementById('ezSpareTrimSelect');
-    var trim = (trimEl && document.getElementById('trimField') && document.getElementById('trimField').style.display !== 'none') ? trimEl.options[trimEl.selectedIndex] && trimEl.options[trimEl.selectedIndex].text : '';
-    if (trim === '— Select trim —') trim = '';
-    var veh = [col, yr, make, model, trim].filter(Boolean).join(' ');
+    var veh = [yr, col, make, model].filter(Boolean).join(' ');
     if (veh) parts.push(veh);
   }
   var notes = document.getElementById('notes').value.trim();
@@ -1893,47 +2009,8 @@ function buildNatureString() {
   return parts.filter(Boolean).join(' | ');
 }
 
-function getHubRingColorName(hubRingText, partNumber) {
-  var text = (hubRingText + ' ' + partNumber).toUpperCase();
-  if (text.includes('DIRECT') || text.includes('NO RING')) return '';
-  if (text.includes('54.1')) return 'Dark Grey';
-  if (text.includes('56.1')) return 'Ocean Blue';
-  if (text.includes('56.6')) return 'Charcoal Grey';
-  if (text.includes('57.1')) return 'Light Pink';
-  if (text.includes('58.1')) return 'Burnt Orange';
-  if (text.includes('60.1')) return 'Medium Blue';
-  if (text.includes('63.4')) return 'Dark Brown';
-  if (text.includes('64.1') || text.includes('Z14D') || text.includes('Z15D')) return 'Deep Royal Blue';
-  if (text.includes('65.1')) return 'Black';
-  if (text.includes('66.1')) return 'Lavender Purple';
-  if (text.includes('66.6')) return 'Olive Brown';
-  if (text.includes('67.1')) return 'Terracotta Red';
-  if (text.includes('70.1')) return 'Silver Grey';
-  if (text.includes('72.6')) return 'Light Silver';
-  return '';
-}
-
-function buildEzSpareLines() {
-  if (!window.ezSpareData) return [];
-  var s = window.ezSpareData;
-  var lines = [];
-  lines.push('');
-  lines.push('*EZ Spare Info*');
-  if (s.size_1) lines.push('Preferred: ' + s.size_1 + (s.kit ? ' (' + s.kit + ')' : ''));
-  if (s.size_2) lines.push('Secondary: ' + s.size_2);
-  if (s.efs_adapter) lines.push('Adapter: ' + s.efs_adapter + (s.pattern ? ' — ' + s.pattern : '') + (s.efs_pn ? ' (' + s.efs_pn + ')' : ''));
-  if (s.lug_thread) lines.push((s.lug_type || 'Lug Nut') + ': ' + s.lug_thread + (s.lug_pn ? ' (' + s.lug_pn + ')' : ''));
-  if (s.hub_ring) {
-    var colorName = getHubRingColorName(s.hub_ring, s.hub_ring_pn || '');
-    lines.push('Hub Ring: ' + s.hub_ring + (s.hub_ring_pn ? ' (' + s.hub_ring_pn + ')' : '') + (colorName ? ' — ' + colorName : ''));
-  }
-  return lines;
-}
-
 function getFormData() {
   var locationInput = document.getElementById('location');
-  var lat = window._locationLat || locationInput.dataset.lat || null;
-  var lng = window._locationLng || locationInput.dataset.lng || null;
   return {
     callNum: document.getElementById('callNum').value.trim(),
     phone: document.getElementById('phone').value.trim(),
@@ -1941,8 +2018,8 @@ function getFormData() {
     name: document.getElementById('callerName').value.trim(),
     nature: buildNatureString(),
     urgent: window.isUrgent,
-    lat: lat || null,
-    lng: lng || null
+    lat: locationInput.dataset.lat || null,
+    lng: locationInput.dataset.lng || null
   };
 }
 
@@ -1953,13 +2030,44 @@ async function saveCallNumber(num) {
   } catch(e) { console.warn('Could not save call number:', e); }
 }
 
-function getMapsUrl(d) {
+// ── Detect a manually-typed intersection (e.g. "Main St & Broad St") ──
+// Only relevant when we don't have precise Places/pasted coordinates —
+// a single text search for an intersection is often unreliable, so we
+// offer a link for each cross street instead.
+function detectIntersection(loc) {
+  if (!loc) return null;
+  var m = loc.match(/^(.{2,60}?)\s*(?:&|\/|@|\bx\b|\band\b)\s*(.{2,60})$/i);
+  if (!m) return null;
+  var a = m[1].trim(), b = m[2].trim();
+  if (!a || !b) return null;
+  // Avoid false-positives on normal full addresses (they don't usually need this)
+  if (a.indexOf(',') !== -1 && b.indexOf(',') !== -1) return null;
+  return [a, b];
+}
+
+function getMapsLinks(d) {
   if (d.lat && d.lng) {
-    return 'https://maps.google.com/?q=' + d.lat + ',' + d.lng;
-  } else if (d.location) {
-    return 'https://maps.google.com/?q=' + encodeURIComponent(d.location);
+    return [{ label: null, url: 'https://www.google.com/maps?q=' + d.lat + ',' + d.lng }];
   }
-  return null;
+  if (d.location) {
+    var cross = detectIntersection(d.location);
+    if (cross) {
+      return [
+        { label: cross[0], url: 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(cross[0] + ', Bergen County, NJ') },
+        { label: cross[1], url: 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(cross[1] + ', Bergen County, NJ') }
+      ];
+    }
+    return [{ label: null, url: 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(d.location) }];
+  }
+  return [];
+}
+
+function appendMapsLinks(lines, d) {
+  var links = getMapsLinks(d);
+  links.forEach(function(l) {
+    if (l.label) lines.push(l.label + ': ' + l.url);
+    else lines.push(l.url);
+  });
 }
 
 function buildWA(d) {
@@ -1970,15 +2078,13 @@ function buildWA(d) {
   lines.push('Call#:' + d.callNum);
   lines.push('');
   lines.push('Location:' + d.location);
-  var mapsUrl = getMapsUrl(d);
-  if (mapsUrl) lines.push(mapsUrl);
+  appendMapsLinks(lines, d);
   lines.push('');
   lines.push('Phone:' + d.phone);
   lines.push('');
   lines.push('Name:' + d.name);
   lines.push('');
   lines.push('Nature:' + d.nature);
-  buildEzSpareLines().forEach(function(l){ lines.push(l); });
   lines.push('');
   lines.push('https://form.jotform.com/212776438913868');
   lines.push('');
@@ -1995,15 +2101,13 @@ function buildInt(d) {
   lines.push('New Call (BC)');
   lines.push('');
   lines.push('Location: ' + d.location);
-  var mapsUrl = getMapsUrl(d);
-  if (mapsUrl) lines.push(mapsUrl);
+  appendMapsLinks(lines, d);
   lines.push('');
   lines.push('Phone: ' + d.phone);
   lines.push('');
   lines.push('Name: ' + d.name);
   lines.push('');
   lines.push('Nature: ' + d.nature);
-  buildEzSpareLines().forEach(function(l){ lines.push(l); });
   return lines.join('\n');
 }
 
@@ -2015,6 +2119,7 @@ function showPreview(txt) {
 window.dispatchWhatsApp = async function() {
   var d = getFormData();
   if (!d.urgent) {
+    if (!d.callNum) { alert('Please enter a Call #.'); return; }
     if (!d.location) { alert('Please enter a Location.'); return; }
     if (!d.nature) { alert('Please select a Nature of Call.'); return; }
   }
@@ -2030,52 +2135,45 @@ window.dispatchInterstate = async function() {
     if (!d.location) { alert('Please enter a Location.'); return; }
     if (!d.nature) { alert('Please select a Nature of Call.'); return; }
   }
+
+  // Interstate does not dispatch in Bergen's primary zone
+  var zone = window.getZone(d.lat, d.lng) || window.currentZone;
+  if (zone === 'primary') {
+    var ok = confirm('This location is in Bergen\u2019s PRIMARY coverage zone.\nInterstate does not dispatch calls here \u2014 Bergen County Chaverim handles these directly (201-800-4357).\n\nSend to Interstate anyway?');
+    if (!ok) return;
+  } else if (zone === 'secondary') {
+    var ok2 = confirm('This location is in Bergen\u2019s SECONDARY zone.\nInterstate only dispatches here if Bergen County Chaverim requests it.\n\nContinue?');
+    if (!ok2) return;
+  }
+
   var msg = buildInt(d);
   showPreview(msg);
   await saveCallNumber(d.callNum);
   window.open('https://wa.me/18458524357?text=' + encodeURIComponent(msg), '_blank');
 };
 
-window.clearLocation = function() {
-  var ind = document.getElementById('areaIndicator'); if (ind) ind.style.display = 'none';
-  var input = document.getElementById('location');
-  if (input) { input.value = ''; input.dataset.lat = ''; input.dataset.lng = ''; }
-  window._locationLat = null;
-  window._locationLng = null;
-};
-
 window.verifyLocation = function() {
-  var input = document.getElementById('location');
-  var loc = input ? input.value.trim() : '';
-  if (!loc) return;
-  var lat = window._locationLat, lng = window._locationLng;
-  var url = (lat && lng)
-    ? 'https://www.google.com/maps?q=' + lat + ',' + lng
-    : 'https://maps.google.com/?q=' + encodeURIComponent(loc);
-  window.open(url, '_blank');
+  var loc = document.getElementById('location').value;
+  if (loc) window.open('https://maps.google.com/?q=' + encodeURIComponent(loc), '_blank');
 };
 
 window.clearForm = async function() {
-  var suggEl = document.getElementById('callerIdSuggestion');
-  if (suggEl) suggEl.style.display = 'none';
-  window.clearLocation();
-  ['phone','callerName','notes','acQuantity','floodEquipment','customNature','customColor','customMake','customModel'].forEach(function(id){
+  ['phone','location','callerName','notes','vColor','acQuantity','floodEquipment','customNature'].forEach(function(id){
     var el = document.getElementById(id); if (el) el.value = '';
   });
-  window.csReset('nature');
-  window.csReset('year');
-  window.csReset('color');
   window.clearMake();
+  if (window.resetYearUI) window.resetYearUI();
   document.getElementById('natureType').value = '';
+
+  document.getElementById('location').dataset.lat = '';
+  document.getElementById('location').dataset.lng = '';
+  window.updateZoneBadge();
 
   window.lockedInsideNote = '';
   window.isUrgent = false;
   window.chips = {};
   document.getElementById('urgentBar').classList.remove('active');
   document.getElementById('vehicleFields').classList.remove('on');
-  document.getElementById('ezSpareWrap').classList.remove('on');
-  window.ezSpareData = null;
-  var tf = document.getElementById('trimField'); if (tf) tf.style.display = 'none';
   document.getElementById('tireOpts').classList.remove('on');
   document.getElementById('houseLockSide').style.display = '';
   document.getElementById('houseLockSide').classList.remove('on');
@@ -2087,7 +2185,6 @@ window.clearForm = async function() {
   document.getElementById('customNatureWrap').classList.remove('on');
   document.querySelectorAll('.chip').forEach(function(c){ c.classList.remove('selected'); });
   document.getElementById('preview').classList.remove('on');
-  document.getElementById('mapsLinkWrap').style.display = 'none';
 
   // Load next call number fresh
   try {
@@ -2095,188 +2192,6 @@ window.clearForm = async function() {
     const last = snap.exists() ? snap.val() : 1000;
     document.getElementById('callNum').value = last + 1;
   } catch(e) { document.getElementById('callNum').value = ''; }
-};
-
-// ══════════════════════════════════════════════
-// ── EZ Spare Fitment Lookup ──
-// ══════════════════════════════════════════════
-const EZ_SPARE_BASE = 'https://ezspare.shmueleidelman-work.workers.dev';
-window.ezSpareData = null; // stores current spec for dispatch message
-
-async function ezFetch(endpoint, year, make, model, option) {
-  try {
-    var params = new URLSearchParams({ year: year||'', make: make||'', model: model||'', option: option||'', undefined: '' });
-    var resp = await fetch(EZ_SPARE_BASE + endpoint + '?' + params.toString());
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    return await resp.json();
-  } catch(e) {
-    console.warn('EZ Spare fetch error:', e);
-    return null;
-  }
-}
-
-function getVehicleFields() {
-  var year  = (document.getElementById('vYear')  || {}).value || '';
-  var make  = (document.getElementById('vMake')  || {}).value || '';
-  var model = (document.getElementById('vModel') || {}).value || '';
-  // Fallback: vYear may be a select now
-  var yearEl = document.getElementById('vYear');
-  if (yearEl && yearEl.tagName === 'SELECT') year = yearEl.value;
-  return { year: year.trim(), make: make.trim(), model: model.trim() };
-}
-
-window.lookupEzSpare = async function() {
-  var v = getVehicleFields();
-  var result = document.getElementById('ezSpareResult');
-  var trimField = document.getElementById('trimField');
-  var trimSel = document.getElementById('ezSpareTrimSelect');
-  window.ezSpareData = null;
-
-  if (!v.year || !v.make || !v.model) {
-    result.innerHTML = '<span style="color:#9A8030;">Enter Year, Make &amp; Model above to look up EZ Spare fitment.</span>';
-    if (trimField) trimField.style.display = 'none';
-    return;
-  }
-
-  result.innerHTML = '<span style="color:#C8A532;"><i class="ti ti-loader" style="animation:spin 0.8s linear infinite;display:inline-block;margin-right:4px;"></i> Looking up fitment...</span>';
-  if (trimField) trimField.style.display = 'none';
-
-  var options = await ezFetch('/api/get-options', v.year, v.make, v.model);
-  if (!options) {
-    result.innerHTML = '<span style="color:#E05000;">Could not reach EZ Spare database.</span>';
-    return;
-  }
-
-  var optArr = extractEzArray(options);
-
-  if (optArr.length === 0) {
-    result.innerHTML = '<span style="color:#E05000;">No fitment data found for ' + v.year + ' ' + v.make + ' ' + v.model + '.</span>';
-    return;
-  }
-
-  if (optArr.length === 1) {
-    var onlyVal = optArr[0].value || optArr[0].name || String(optArr[0]);
-    if (trimField) trimField.style.display = 'none';
-    await fetchAndRenderEzSpec(v.year, v.make, v.model, onlyVal);
-  } else {
-    // Multiple trims — show trim field in vehicle info
-    trimSel.innerHTML = '<option value="">— Select trim —</option>';
-    optArr.forEach(function(item) {
-      var val = item.value || item.name || String(item);
-      var txt = item.name || item.text || String(item);
-      var opt = document.createElement('option');
-      opt.value = val; opt.textContent = txt;
-      trimSel.appendChild(opt);
-    });
-    if (trimField) trimField.style.display = 'block';
-    // Auto-select first trim
-    trimSel.selectedIndex = 1;
-    var firstVal = optArr[0].value || optArr[0].name || String(optArr[0]);
-    await fetchAndRenderEzSpec(v.year, v.make, v.model, firstVal);
-  }
-};
-
-window.onEzSpareTrimChange = async function() {
-  var v = getVehicleFields();
-  var trimVal = document.getElementById('ezSpareTrimSelect').value;
-  if (!trimVal) return;
-  await fetchAndRenderEzSpec(v.year, v.make, v.model, trimVal);
-};
-
-async function fetchAndRenderEzSpec(year, make, model, option) {
-  var result = document.getElementById('ezSpareResult');
-  result.innerHTML = '<span style="color:#C8A532;"><i class="ti ti-loader" style="animation:spin 0.8s linear infinite;display:inline-block;margin-right:4px;"></i> Loading specs...</span>';
-
-  var data = await ezFetch('/api/get-info', year, make, model, option);
-  if (!data) {
-    result.innerHTML = '<span style="color:#E05000;">Could not load specs for this trim.</span>';
-    return;
-  }
-
-  var spec = Array.isArray(data) ? data[0] : data;
-  window.ezSpareData = spec;
-
-  var dotColor = getEzHubColor(spec.hub_ring || '', spec.hub_ring_pn || '');
-
-  result.innerHTML =
-    '<div style="display:grid;gap:6px;">' +
-      '<div style="color:#E8D98A;font-size:13px;"><span style="color:#9A8030;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">Preferred Size</span><br><strong>' + (spec.size_1 || 'N/A') + '</strong>' + (spec.kit ? ' <span style="color:#9A8030;font-size:11px;">('+spec.kit+')</span>' : '') + '</div>' +
-      '<div style="color:#E8D98A;font-size:13px;"><span style="color:#9A8030;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">Secondary Size</span><br><strong>' + (spec.size_2 || 'N/A') + '</strong></div>' +
-      '<div style="color:#E8D98A;font-size:13px;"><span style="color:#9A8030;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">EFS Adapter</span><br><strong>' + (spec.efs_adapter || 'Direct Fit') + ' — ' + (spec.pattern || '') + '</strong>' + (spec.efs_pn ? ' <span style="color:#9A8030;font-size:11px;">('+spec.efs_pn+')</span>' : '') + '</div>' +
-      '<div style="color:#E8D98A;font-size:13px;"><span style="color:#9A8030;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">' + (spec.lug_type || 'Lug Nut') + '</span><br><strong>' + (spec.lug_thread || 'N/A') + '</strong>' + (spec.lug_pn ? ' <span style="color:#9A8030;font-size:11px;">('+spec.lug_pn+')</span>' : '') + '</div>' +
-      '<div style="color:#E8D98A;font-size:13px;"><span style="color:#9A8030;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">Hub Ring</span><br>' +
-        '<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:' + dotColor + ';border:1px solid rgba(255,255,255,0.2);margin-right:6px;vertical-align:middle;"></span>' +
-        '<strong>' + (spec.hub_ring || 'Direct Fit') + '</strong>' + (spec.hub_ring_pn ? ' <span style="color:#9A8030;font-size:11px;">('+spec.hub_ring_pn+')</span>' : '') +
-        (getHubRingColorName(spec.hub_ring || '', spec.hub_ring_pn || '') ? ' <span style="color:#C8A532;font-size:11px;">— ' + getHubRingColorName(spec.hub_ring || '', spec.hub_ring_pn || '') + '</span>' : '') +
-      '</div>' +
-    '</div>';
-}
-
-function extractEzArray(raw) {
-  if (!raw) return [];
-  if (Array.isArray(raw)) return raw;
-  if (typeof raw === 'object') {
-    var keys = ['makes','models','trims','options','data','result','values'];
-    for (var i = 0; i < keys.length; i++) {
-      if (raw[keys[i]] && Array.isArray(raw[keys[i]])) return raw[keys[i]];
-    }
-    return Object.keys(raw).map(function(k){ return { value: k, name: k }; });
-  }
-  return [];
-}
-
-function getEzHubColor(hubRingText, partNumber) {
-  var text = (hubRingText + ' ' + partNumber).toUpperCase();
-  if (text.includes('DIRECT') || text.includes('NO RING')) return 'transparent';
-  if (text.includes('54.1')) return '#424242';
-  if (text.includes('56.1')) return '#1d4e89';
-  if (text.includes('56.6')) return '#383838';
-  if (text.includes('57.1')) return '#f3a1a6';
-  if (text.includes('58.1')) return '#d75431';
-  if (text.includes('60.1')) return '#22558a';
-  if (text.includes('63.4')) return '#5c4013';
-  if (text.includes('64.1')) return '#163882';
-  if (text.includes('65.1')) return '#000000';
-  if (text.includes('66.1')) return '#9d85be';
-  if (text.includes('66.6')) return '#856128';
-  if (text.includes('67.1')) return '#c3412f';
-  if (text.includes('70.1')) return '#b2b5b9';
-  return '#b2b5b9';
-}
-
-// ── Auto re-query EZ spare when vehicle fields change ──
-function maybeRefreshEzSpare() {
-  if (window.chips['spare'] && window.chips['spare'].id === 'no_spare_needs_ez') {
-    window.lookupEzSpare();
-  }
-}
-
-// Hook into make/model change handlers
-var _origOnMakeChange = window.onMakeChange;
-window.onMakeChange = function() {
-  _origOnMakeChange && _origOnMakeChange();
-  maybeRefreshEzSpare();
-};
-
-var _origOnMakeInput = window.onMakeInput;
-window.onMakeInput = function() {
-  _origOnMakeInput && _origOnMakeInput();
-  maybeRefreshEzSpare();
-};
-
-// Year field — works for both select and text input
-document.addEventListener('change', function(e) {
-  if (e.target && e.target.id === 'vYear') maybeRefreshEzSpare();
-});
-document.addEventListener('input', function(e) {
-  if (e.target && e.target.id === 'vYear') maybeRefreshEzSpare();
-});
-
-// Model field
-var _origOnModelChange = window.onModelChange;
-window.onModelChange = function() {
-  _origOnModelChange && _origOnModelChange();
-  maybeRefreshEzSpare();
 };
 
 // ── Init ──
