@@ -26,6 +26,10 @@ window.initAutocomplete = function() {
     input.value = address;
     input.dataset.lat = place.geometry.location.lat();
     input.dataset.lng = place.geometry.location.lng();
+    // Keep the POI/establishment name (e.g. "Costco", "ShopRite") so it can be
+    // shown above the address in the dispatch message — only when it's distinct
+    // from the address itself (a plain street geocode has no separate name).
+    input.dataset.name = (place.name && place.name !== address) ? place.name : '';
     if (window.updateZoneBadge) window.updateZoneBadge();
   });
 };
@@ -198,6 +202,14 @@ window.initAutocomplete = function() {
   .modal-overlay.on { display: flex; }
   .modal { background: #FDFBF0; border-radius: 18px; border: 1px solid #DDD09A; width: 100%; max-width: 380px; box-shadow: 0 20px 60px rgba(0,0,0,0.45); overflow: hidden; animation: slideUp 0.2s ease; }
   @keyframes slideUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes growFromBottom {
+    0%   { opacity: 0; transform: translateY(65vh) scale(0.22); border-radius: 999px; }
+    55%  { opacity: 1; }
+    100% { opacity: 1; transform: translateY(0) scale(1); border-radius: 18px; }
+  }
+  .grow-modal { animation: growFromBottom 0.45s cubic-bezier(0.22, 1.4, 0.36, 1) both; transform-origin: bottom center; }
+  .modal-btn-ignore { background: #C8A532; color: #0F0E06; }
+  .modal-btn-ignore:hover { background: #D8B540; }
   .modal-hdr { background: #0F0E06; padding: 1rem 1.25rem; border-bottom: 1px solid #2A2810; display: flex; align-items: center; gap: 10px; }
   .modal-hdr i { font-size: 22px; color: #E05000; }
   .modal-hdr-txt { color: #C8A532; font-size: 15px; font-weight: 600; }
@@ -406,7 +418,7 @@ window.initAutocomplete = function() {
       <div class="field">
         <div class="lbl"><i class="ti ti-map-pin"></i> Location <span class="req">*</span></div>
         <div class="inp-wrap loc-wrap">
-          <input type="text" id="location" placeholder="123 Main St, Edison, NJ" style="padding-right:90px;" oninput="document.getElementById('location').dataset.lat=''; document.getElementById('location').dataset.lng=''; window.updateZoneBadge();" />
+          <input type="text" id="location" placeholder="123 Main St, Edison, NJ" style="padding-right:90px;" oninput="document.getElementById('location').dataset.lat=''; document.getElementById('location').dataset.lng=''; document.getElementById('location').dataset.name=''; window.updateZoneBadge();" />
           <button class="field-clear" onclick="window.clearField('location')" tabindex="-1" style="right:56px;">&times;</button>
           <button class="map-btn" onclick="window.verifyLocation()"><i class="ti ti-map-pin" style="font-size:12px;"></i> Map</button>
         </div>
@@ -589,7 +601,7 @@ window.initAutocomplete = function() {
 
       <div class="actions">
         <button class="btn btn-wa" onclick="window.dispatchWhatsApp()"><i class="ti ti-message-circle"></i> Dispatch via WhatsApp</button>
-        <button class="btn btn-int" onclick="window.dispatchInterstate()"><i class="ti ti-car"></i> Dispatch to Interstate</button>
+        <button class="btn btn-int" id="dispatchIntBtn" onclick="window.dispatchInterstate()"><i class="ti ti-car"></i> Dispatch to Interstate</button>
       </div>
     </div>
   </div>
@@ -636,6 +648,24 @@ window.initAutocomplete = function() {
         <button class="modal-btn modal-btn-no" onclick="window.trappedWho('Other')">
           Other — specify in notes
         </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Outside coverage area — grows up from the Interstate button -->
+<div class="modal-overlay" id="outsideZoneModal">
+  <div class="modal grow-modal" id="outsideZoneModalBox">
+    <div class="modal-hdr">
+      <i class="ti ti-map-pin-off"></i>
+      <div class="modal-hdr-txt">Outside Coverage Area</div>
+    </div>
+    <div class="modal-body">
+      <div class="modal-question">This location is outside Bergen County's coverage area</div>
+      <div class="modal-sub">Double-check the address — Interstate may not be able to help here.</div>
+      <div class="modal-btns" style="grid-template-columns:1fr;">
+        <button class="modal-btn modal-btn-ignore" onclick="window.confirmOutsideDispatch()">Ignore &amp; Send Anyway</button>
+        <button class="modal-btn modal-btn-no" onclick="window.cancelOutsideDispatch()" style="margin-top:8px;">Cancel</button>
       </div>
     </div>
   </div>
@@ -963,6 +993,7 @@ window.pasteMapsUrl = async function() {
     document.getElementById('location').value = loc;
     document.getElementById('location').dataset.lat = coords.lat;
     document.getElementById('location').dataset.lng = coords.lng;
+    document.getElementById('location').dataset.name = '';
     updateMapsLink();
     window.updateZoneBadge();
     showToast('\u2713 Coordinates set: ' + loc);
@@ -970,6 +1001,7 @@ window.pasteMapsUrl = async function() {
     document.getElementById('location').value = url;
     document.getElementById('location').dataset.lat = '';
     document.getElementById('location').dataset.lng = '';
+    document.getElementById('location').dataset.name = '';
     updateMapsLink();
     window.updateZoneBadge();
     showToast('Link pasted as location');
@@ -985,7 +1017,7 @@ window.clearField = function(id) {
   el.value = '';
   el.focus();
   if (id === 'location') {
-    el.dataset.lat = ''; el.dataset.lng = '';
+    el.dataset.lat = ''; el.dataset.lng = ''; el.dataset.name = '';
     window.updateZoneBadge();
   }
 };
@@ -2015,6 +2047,7 @@ function getFormData() {
     callNum: document.getElementById('callNum').value.trim(),
     phone: document.getElementById('phone').value.trim(),
     location: locationInput.value.trim(),
+    poiName: (locationInput.dataset.name || '').trim(),
     name: document.getElementById('callerName').value.trim(),
     nature: buildNatureString(),
     urgent: window.isUrgent,
@@ -2077,6 +2110,7 @@ function buildWA(d) {
   if (d.urgent || window.lockedInsideNote) lines.push('');
   lines.push('Call#:' + d.callNum);
   lines.push('');
+  if (d.poiName) lines.push(d.poiName);
   lines.push('Location:' + d.location);
   appendMapsLinks(lines, d);
   lines.push('');
@@ -2100,6 +2134,7 @@ function buildInt(d) {
   if (d.urgent || window.lockedInsideNote) lines.push('');
   lines.push('New Call (BC)');
   lines.push('');
+  if (d.poiName) lines.push(d.poiName);
   lines.push('Location: ' + d.location);
   appendMapsLinks(lines, d);
   lines.push('');
@@ -2144,12 +2179,36 @@ window.dispatchInterstate = async function() {
   } else if (zone === 'secondary') {
     var ok2 = confirm('This location is in Bergen\u2019s SECONDARY zone.\nInterstate only dispatches here if Bergen County Chaverim requests it.\n\nContinue?');
     if (!ok2) return;
+  } else if (zone === 'outside') {
+    window._pendingInterstateData = d;
+    document.getElementById('outsideZoneModal').classList.add('on');
+    return;
   }
 
+  await window.sendInterstateDispatch(d);
+};
+
+// Actually builds + sends the Interstate WhatsApp message
+window.sendInterstateDispatch = async function(d) {
   var msg = buildInt(d);
   showPreview(msg);
   await saveCallNumber(d.callNum);
   window.open('https://wa.me/18458524357?text=' + encodeURIComponent(msg), '_blank');
+};
+
+// "Ignore & Send Anyway" on the outside-coverage-area modal
+window.confirmOutsideDispatch = async function() {
+  document.getElementById('outsideZoneModal').classList.remove('on');
+  var d = window._pendingInterstateData;
+  window._pendingInterstateData = null;
+  if (!d) return;
+  await window.sendInterstateDispatch(d);
+};
+
+// "Cancel" on the outside-coverage-area modal
+window.cancelOutsideDispatch = function() {
+  document.getElementById('outsideZoneModal').classList.remove('on');
+  window._pendingInterstateData = null;
 };
 
 window.verifyLocation = function() {
@@ -2167,6 +2226,7 @@ window.clearForm = async function() {
 
   document.getElementById('location').dataset.lat = '';
   document.getElementById('location').dataset.lng = '';
+  document.getElementById('location').dataset.name = '';
   window.updateZoneBadge();
 
   window.lockedInsideNote = '';
