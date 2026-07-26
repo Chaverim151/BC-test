@@ -13,6 +13,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="BC Dispatch" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css" />
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>
 // Must be global for Google Maps callback — defined before the API script loads
 window.initAutocomplete = function() {
@@ -451,7 +452,7 @@ window.initAutocomplete = function() {
           <button class="paste-maps-btn" onclick="window.pasteMapsUrl()" style="margin-top:0;">
             <i class="ti ti-clipboard"></i> Paste Maps link
           </button>
-          <button class="paste-maps-btn" onclick="window.open('https://i911.com','_blank')" style="margin-top:0;border-color:#4a7fa5;color:#4a7fa5;">
+          <button class="paste-maps-btn" id="i911RequestBtn" onclick="window.requestI911Location()" style="margin-top:0;border-color:#4a7fa5;color:#4a7fa5;">
             <i class="ti ti-location"></i> Request via i911
           </button>
         </div>
@@ -723,6 +724,28 @@ window.initAutocomplete = function() {
   </div>
 </div>
 
+<!-- i911 caller-location result -->
+<div class="modal-overlay" id="i911ResultModal">
+  <div class="modal" id="i911ResultModalBox">
+    <div class="modal-hdr">
+      <i class="ti ti-map-pin-check"></i>
+      <div class="modal-hdr-txt">i911 Location Received</div>
+    </div>
+    <div class="modal-body">
+      <div class="modal-question">Caller's estimated location</div>
+      <div style="text-align:left;background:#0F0E06;border:1px solid #2A2810;border-radius:12px;padding:1rem;margin:0.9rem 0 1.25rem;color:#E8D98A;font-size:14px;line-height:1.9;">
+        <div><strong style="color:#C8A532;">Coordinates:</strong> <span id="i911Coords"></span></div>
+        <div><strong style="color:#C8A532;">Accuracy:</strong> <span id="i911Accuracy"></span></div>
+        <div><strong style="color:#C8A532;">Closest address:</strong> <span id="i911Address"></span></div>
+      </div>
+      <div class="modal-btns" style="grid-template-columns:1fr;">
+        <button class="modal-btn modal-btn-ignore" onclick="window.useI911Location()">Use This Location</button>
+        <button class="modal-btn modal-btn-no" onclick="window.dismissI911Modal()" style="margin-top:8px;">Dismiss</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
 import { getDatabase, ref, get, set, onValue } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-database.js";
@@ -904,6 +927,179 @@ window.updateZoneBadge = function() {
       }
     }
   }
+};
+
+// ── i911 caller-location request ──
+// Contract (see i911-worker.js): POST {phonenumber:"+1XXXXXXXXXX"} to
+// <I911_PROXY_BASE>/i911 → { webSocketURL } → connect via socket.io and
+// listen for a "location-update" event carrying { latitude, longitude }.
+const I911_PROXY_BASE = 'https://i911.shmueleidelman-work.workers.dev';
+window._i911Socket = null;
+window._i911TimeoutId = null;
+window._i911PendingLatLng = null;
+window._i911PendingAddress = null;
+
+function toE164(phoneStr) {
+  var raw = (phoneStr || '').trim();
+  if (!raw) return null;
+  if (raw.charAt(0) === '+') {
+    var plusDigits = raw.replace(/[^\d+]/g, '');
+    return plusDigits.length > 1 ? plusDigits : null;
+  }
+  var digits = raw.replace(/\D/g, '');
+  if (digits.length === 10) return '+1' + digits;
+  if (digits.length === 11 && digits.charAt(0) === '1') return '+' + digits;
+  return null;
+}
+
+window.requestI911Location = async function() {
+  var phoneInput = document.getElementById('phone');
+  var e164 = toE164(phoneInput ? phoneInput.value : '');
+  if (!e164) {
+    showToast('Enter a valid 10-digit phone number first');
+    if (phoneInput) phoneInput.focus();
+    return;
+  }
+
+  window.closeI911Socket();
+
+  var btn = document.getElementById('i911RequestBtn');
+  if (btn) { btn.style.opacity = '0.6'; btn.style.pointerEvents = 'none'; }
+  showToast('Requesting location via i911...');
+
+  var resp, data;
+  try {
+    resp = await fetch(I911_PROXY_BASE + '/i911', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phonenumber: e164 })
+    });
+    data = await resp.json().catch(function() { return null; });
+  } catch (e) {
+    if (btn) { btn.style.opacity = ''; btn.style.pointerEvents = ''; }
+    showToast('Could not reach i911 relay — check connection');
+    console.warn('i911 request error:', e);
+    return;
+  }
+
+  if (btn) { btn.style.opacity = ''; btn.style.pointerEvents = ''; }
+
+  if (!resp.ok || !data || !data.webSocketURL) {
+    var errMsg = (data && data.error) ? data.error : ('HTTP ' + resp.status);
+    showToast('i911 request failed: ' + errMsg);
+    console.warn('i911 request failed:', errMsg);
+    return;
+  }
+
+  showToast('Location request sent \u2014 waiting for caller to respond...');
+  window.connectI911Socket(data.webSocketURL);
+};
+
+window.connectI911Socket = function(webSocketURL) {
+  if (typeof io !== 'function') {
+    showToast('Location service unavailable (socket.io failed to load)');
+    return;
+  }
+
+  var socket = io(webSocketURL, { transports: ['websocket'] });
+  window._i911Socket = socket;
+
+  socket.on('connect_error', function(err) {
+    console.warn('i911 socket connect_error:', err && err.message ? err.message : err);
+    showToast('Could not connect to i911 location service');
+    window.closeI911Socket();
+  });
+
+  socket.on('location-update', function(payload) {
+    window.handleI911Location(payload);
+  });
+
+  // Give up if the caller never responds to the location-request text
+  window._i911TimeoutId = setTimeout(function() {
+    showToast('No location received from caller (timed out)');
+    window.closeI911Socket();
+  }, 5 * 60 * 1000);
+};
+
+window.closeI911Socket = function() {
+  if (window._i911TimeoutId) { clearTimeout(window._i911TimeoutId); window._i911TimeoutId = null; }
+  if (window._i911Socket) {
+    try { window._i911Socket.disconnect(); } catch (e) { /* ignore */ }
+    window._i911Socket = null;
+  }
+};
+
+window.handleI911Location = function(payload) {
+  window.closeI911Socket();
+
+  var lat = payload && (payload.latitude != null ? payload.latitude : payload.lat);
+  var lng = payload && (payload.longitude != null ? payload.longitude : payload.lng);
+  var accuracy = payload && (
+    payload.accuracy != null ? payload.accuracy :
+    (payload.acc != null ? payload.acc : null)
+  );
+
+  lat = parseFloat(lat); lng = parseFloat(lng);
+  if (isNaN(lat) || isNaN(lng)) {
+    showToast('i911 sent a location update with no usable coordinates');
+    console.warn('i911 location-update payload:', payload);
+    return;
+  }
+
+  window.showI911ResultModal(lat, lng, accuracy);
+};
+
+// Shows the received coordinates + accuracy, and reverse-geocodes the
+// closest street address via the Google Maps Geocoder (already loaded for
+// Places Autocomplete — no extra script needed).
+window.showI911ResultModal = function(lat, lng, accuracy) {
+  window._i911PendingLatLng = { lat: lat, lng: lng };
+  window._i911PendingAddress = null;
+
+  document.getElementById('i911Coords').textContent = lat.toFixed(6) + ', ' + lng.toFixed(6);
+  document.getElementById('i911Accuracy').textContent = (accuracy != null && !isNaN(accuracy))
+    ? ('\u00B1' + Math.round(accuracy) + 'm estimated')
+    : 'Not provided by i911';
+
+  var addrEl = document.getElementById('i911Address');
+  addrEl.textContent = 'Looking up nearest address...';
+
+  document.getElementById('i911ResultModal').classList.add('on');
+
+  if (window.google && google.maps && google.maps.Geocoder) {
+    var geocoder = new google.maps.Geocoder();
+    geocoder.geocode({ location: { lat: lat, lng: lng } }, function(results, status) {
+      if (status === 'OK' && results && results[0]) {
+        addrEl.textContent = results[0].formatted_address;
+        window._i911PendingAddress = results[0].formatted_address;
+      } else {
+        addrEl.textContent = 'Could not resolve a street address for this location';
+      }
+    });
+  } else {
+    addrEl.textContent = 'Address lookup unavailable';
+  }
+};
+
+window.dismissI911Modal = function() {
+  document.getElementById('i911ResultModal').classList.remove('on');
+  window._i911PendingLatLng = null;
+  window._i911PendingAddress = null;
+};
+
+window.useI911Location = function() {
+  var pending = window._i911PendingLatLng;
+  if (!pending) return;
+
+  var locEl = document.getElementById('location');
+  var display = window._i911PendingAddress || (pending.lat.toFixed(6) + ', ' + pending.lng.toFixed(6));
+  locEl.value = display;
+  locEl.dataset.lat = pending.lat;
+  locEl.dataset.lng = pending.lng;
+  locEl.dataset.name = '';
+  window.updateZoneBadge();
+  window.dismissI911Modal();
+  showToast('\u2713 Location filled from i911');
 };
 
 // ── EZ Spare fitment lookup (Flat Tire → "No spare, needs EZ spare") ──
