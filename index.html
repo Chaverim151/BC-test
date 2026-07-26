@@ -2,10 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Chaverim Bergen County — Emergency Dispatch</title>
 <link rel="icon" type="image/png" href="https://i.ibb.co/Kc2B52nS/download-1.png" />
 <link rel="apple-touch-icon" href="https://i.ibb.co/Kc2B52nS/download-1.png" />
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#0F0E06" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="BC Dispatch" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css" />
 <script>
 // Must be global for Google Maps callback — defined before the API script loads
@@ -361,6 +367,9 @@ window.initAutocomplete = function() {
     <div class="brand-sub">Bergen County</div>
     <div class="brand-tag">Dispatch Center</div>
   </div>
+  <button id="installAppBtn" onclick="window.installApp()" style="display:none;margin-left:auto;align-items:center;gap:6px;background:#C8A532;color:#0F0E06;border:none;border-radius:9px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">
+    <i class="ti ti-download" style="font-size:15px;"></i> Install App
+  </button>
 </div>
 
 <div class="page">
@@ -471,11 +480,26 @@ window.initAutocomplete = function() {
             <option value="vehicle_pullout">Vehicle Pullout</option>
             <option value="plastic_hanging">Plastic Hanging</option>
             <option value="bumper_hanging">Bumper Hanging</option>
+            <option value="stuck_snow">Stuck in Snow</option>
+            <option value="stuck_rock">Stuck on a Rock</option>
+            <option value="stuck_mud">Stuck in Mud</option>
+            <option value="party_trapped_vehicle">Party Trapped in Vehicle</option>
+            <option value="garage_pickup">Garage Pickup</option>
+            <option value="garage_dropoff">Garage Dropoff</option>
           </optgroup>
           <optgroup label="Community / Home">
             <option value="flood">Flood</option>
             <option value="heater">Heater Request</option>
             <option value="ac">AC Request</option>
+            <option value="cut_lock">Cut a Lock</option>
+            <option value="cut_tree">Cut a Tree</option>
+            <option value="smell_gas">Smell of Gas</option>
+          </optgroup>
+          <optgroup label="Safety / Emergency">
+            <option value="traffic_control">Traffic Control</option>
+            <option value="missing_person">Missing Person</option>
+            <option value="edp_situation">EDP Situation</option>
+            <option value="party_trapped">Party Trapped</option>
           </optgroup>
           <optgroup label="Other">
             <option value="other">Other</option>
@@ -866,10 +890,17 @@ window.updateZoneBadge = function() {
       badge.classList.add('zone-outside', 'on');
       text.textContent = 'Outside Bergen coverage area';
       // Auto-pop the shared dispatch-check modal the moment a location resolves
-      // to genuinely uncovered — only once per address (not on every re-check).
+      // to genuinely uncovered — only once per address (not on every re-check),
+      // and never on top of a modal the dispatcher is already mid-interaction with.
       if (!window._outsideZoneNotified) {
-        window._outsideZoneNotified = true;
-        if (window.showOutsideZoneModal) window.showOutsideZoneModal();
+        var dispatchModalEl = document.getElementById('dispatchCheckModal');
+        var trappedModalEl = document.getElementById('trappedModal');
+        var somethingElseOpen = (dispatchModalEl && dispatchModalEl.classList.contains('on'))
+          || (trappedModalEl && trappedModalEl.classList.contains('on'));
+        if (!somethingElseOpen) {
+          window._outsideZoneNotified = true;
+          if (window.showOutsideZoneModal) window.showOutsideZoneModal();
+        }
       }
     }
   }
@@ -931,6 +962,7 @@ function ezSparePopulateSelect(el, rawData, placeholder) {
 
 // Re-fetches the Trim/Option list for the Vehicle info "Trim / Option" field
 // from the current Year/Make/Model — called whenever any of those change.
+window._vTrimRequestId = 0;
 window.refreshVehicleTrim = async function() {
   var trimSel = document.getElementById('vTrim');
   if (!trimSel) return;
@@ -945,6 +977,10 @@ window.refreshVehicleTrim = async function() {
   var make  = document.getElementById('vMake')  ? document.getElementById('vMake').value  : '';
   var model = document.getElementById('vModel') ? document.getElementById('vModel').value : '';
 
+  // Every call gets its own id; if a newer call starts before this one's
+  // fetch resolves, this one's (now-stale) result is discarded below.
+  var requestId = ++window._vTrimRequestId;
+
   if (!year || !make || !model || make === 'Other' || model === 'Other') {
     trimSel.innerHTML = '<option value="">— Select year, make &amp; model first —</option>';
     trimSel.disabled = true;
@@ -955,12 +991,14 @@ window.refreshVehicleTrim = async function() {
   trimSel.innerHTML = '<option value="">Loading options...</option>';
   trimSel.disabled = false;
   var data = await ezSpareFetch('/api/get-options', year, make, model);
+  if (requestId !== window._vTrimRequestId) return; // superseded by a newer Year/Make/Model change
   ezSparePopulateSelect(trimSel, data, 'Select Trim / Option');
 };
 
 // Fired when the shared Vehicle info Trim/Option changes. Always keeps the
 // vehicle description in sync; only fetches EZ Spare hardware specs when the
 // "No spare — needs EZ spare" chip is the active one.
+window._ezInfoRequestId = 0;
 window.onVehicleTrimChange = async function() {
   var trimSel = document.getElementById('vTrim');
   var resultEl = document.getElementById('ezSpareResult');
@@ -986,7 +1024,9 @@ window.onVehicleTrimChange = async function() {
   var make  = document.getElementById('vMake').value;
   var model = document.getElementById('vModel').value;
 
+  var requestId = ++window._ezInfoRequestId;
   var data = await ezSpareFetch('/api/get-info', year, make, model, trimSel.value);
+  if (requestId !== window._ezInfoRequestId) return; // superseded by a newer Trim change
   var spec = data ? (Array.isArray(data) ? data[0] : data) : null;
 
   if (!spec) {
@@ -1029,7 +1069,10 @@ const TELZIO_PROXY_URL = 'https://cobc.shmueleidelman-work.workers.dev/proxy';
 var telzioInterval = null;
 var lastLiveCallFrom = null;
 
+var telzioPollInFlight = false;
 async function pollTelzioLiveCalls() {
+  if (telzioPollInFlight) return; // previous poll hasn't finished — skip this tick
+  telzioPollInFlight = true;
   try {
     var resp = await fetch(TELZIO_PROXY_URL + '/calls/live');
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
@@ -1071,6 +1114,8 @@ async function pollTelzioLiveCalls() {
     var statusEl = document.getElementById('telzioStatus');
     statusEl.textContent = '';
     statusEl.className = 'telzio-status offline';
+  } finally {
+    telzioPollInFlight = false;
   }
 }
 
@@ -1269,6 +1314,7 @@ function showToast(msg) {
 }
 
 // ── Populate color datalist ──
+var colorDropdownOutsideHandler = null;
 window.toggleColorDropdown = function() {
   var btn = document.getElementById('colorDropdownBtn');
   var menu = document.getElementById('colorDropdownMenu');
@@ -1277,18 +1323,24 @@ window.toggleColorDropdown = function() {
   if (isOpen) {
     menu.classList.remove('open');
     btn.classList.remove('open');
+    if (colorDropdownOutsideHandler) {
+      document.removeEventListener('click', colorDropdownOutsideHandler);
+      colorDropdownOutsideHandler = null;
+    }
   } else {
     menu.classList.add('open');
     btn.classList.add('open');
     // Close on outside click
     setTimeout(function() {
-      document.addEventListener('click', function handler(e) {
+      colorDropdownOutsideHandler = function(e) {
         if (!document.getElementById('colorDropdown').contains(e.target)) {
           menu.classList.remove('open');
           btn.classList.remove('open');
-          document.removeEventListener('click', handler);
+          document.removeEventListener('click', colorDropdownOutsideHandler);
+          colorDropdownOutsideHandler = null;
         }
-      });
+      };
+      document.addEventListener('click', colorDropdownOutsideHandler);
     }, 0);
   }
 };
@@ -1481,6 +1533,7 @@ function buildYearDropdownMenu(years) {
   });
 }
 
+var yearDropdownOutsideHandler = null;
 window.toggleYearDropdown = function() {
   var btn = document.getElementById('yearDropdownBtn');
   var menu = document.getElementById('yearDropdownMenu');
@@ -1489,17 +1542,23 @@ window.toggleYearDropdown = function() {
   if (isOpen) {
     menu.classList.remove('open');
     btn.classList.remove('open');
+    if (yearDropdownOutsideHandler) {
+      document.removeEventListener('click', yearDropdownOutsideHandler);
+      yearDropdownOutsideHandler = null;
+    }
   } else {
     menu.classList.add('open');
     btn.classList.add('open');
     setTimeout(function() {
-      document.addEventListener('click', function handler(e) {
+      yearDropdownOutsideHandler = function(e) {
         if (!document.getElementById('yearDropdown').contains(e.target)) {
           menu.classList.remove('open');
           btn.classList.remove('open');
-          document.removeEventListener('click', handler);
+          document.removeEventListener('click', yearDropdownOutsideHandler);
+          yearDropdownOutsideHandler = null;
         }
-      });
+      };
+      document.addEventListener('click', yearDropdownOutsideHandler);
     }, 0);
   }
 };
@@ -1763,6 +1822,7 @@ function buildMakeDropdownMenu(makes) {
   });
 }
 
+var makeDropdownOutsideHandler = null;
 window.toggleMakeDropdown = function() {
   var btn = document.getElementById('makeDropdownBtn');
   var menu = document.getElementById('makeDropdownMenu');
@@ -1771,17 +1831,23 @@ window.toggleMakeDropdown = function() {
   if (isOpen) {
     menu.classList.remove('open');
     btn.classList.remove('open');
+    if (makeDropdownOutsideHandler) {
+      document.removeEventListener('click', makeDropdownOutsideHandler);
+      makeDropdownOutsideHandler = null;
+    }
   } else {
     menu.classList.add('open');
     btn.classList.add('open');
     setTimeout(function() {
-      document.addEventListener('click', function handler(e) {
+      makeDropdownOutsideHandler = function(e) {
         if (!document.getElementById('makeDropdown').contains(e.target)) {
           menu.classList.remove('open');
           btn.classList.remove('open');
-          document.removeEventListener('click', handler);
+          document.removeEventListener('click', makeDropdownOutsideHandler);
+          makeDropdownOutsideHandler = null;
         }
-      });
+      };
+      document.addEventListener('click', makeDropdownOutsideHandler);
     }, 0);
   }
 };
@@ -1850,6 +1916,7 @@ function populateModelOptions(models) {
   if (!isMobile) buildModelDropdownMenu(withOther);
 }
 
+var modelDropdownOutsideHandler = null;
 window.toggleModelDropdown = function() {
   if (!window._modelEnabled) { showToast('Select a make first'); return; }
   var btn = document.getElementById('modelDropdownBtn');
@@ -1859,17 +1926,23 @@ window.toggleModelDropdown = function() {
   if (isOpen) {
     menu.classList.remove('open');
     btn.classList.remove('open');
+    if (modelDropdownOutsideHandler) {
+      document.removeEventListener('click', modelDropdownOutsideHandler);
+      modelDropdownOutsideHandler = null;
+    }
   } else {
     menu.classList.add('open');
     btn.classList.add('open');
     setTimeout(function() {
-      document.addEventListener('click', function handler(e) {
+      modelDropdownOutsideHandler = function(e) {
         if (!document.getElementById('modelDropdown').contains(e.target)) {
           menu.classList.remove('open');
           btn.classList.remove('open');
-          document.removeEventListener('click', handler);
+          document.removeEventListener('click', modelDropdownOutsideHandler);
+          modelDropdownOutsideHandler = null;
         }
-      });
+      };
+      document.addEventListener('click', modelDropdownOutsideHandler);
     }, 0);
   }
 };
@@ -2113,7 +2186,7 @@ window.toggleUrgent = function() {
 };
 
 // ── Nature change ──
-var VEHICLE_NATURES = ['flat_tire','boost','out_of_gas','lockout','vehicle_stalled','vehicle_pullout','plastic_hanging','bumper_hanging'];
+var VEHICLE_NATURES = ['flat_tire','boost','out_of_gas','lockout','vehicle_stalled','vehicle_pullout','plastic_hanging','bumper_hanging','stuck_snow','stuck_rock','stuck_mud','party_trapped_vehicle','garage_pickup','garage_dropoff'];
 var QTY_NATURES = { heater: 'Heater units', ac: 'AC units' };
 
 window.onNatureChange = function() {
@@ -2136,8 +2209,8 @@ window.onNatureChange = function() {
   document.getElementById('houseLockSide').style.display = '';
   document.getElementById('houseLockSide').classList.remove('on');
 
-  // Show trapped modal when lockout selected
-  if (val === 'lockout') {
+  // Show trapped modal when lockout or a "party trapped" nature is selected
+  if (val === 'lockout' || val === 'party_trapped' || val === 'party_trapped_vehicle') {
     document.getElementById('trappedModal').classList.add('on');
   }
 
@@ -2359,8 +2432,10 @@ function getFormData() {
 
 // ── Save call number to Firebase after dispatch ──
 async function saveCallNumber(num) {
+  var parsed = parseInt(num, 10);
+  if (isNaN(parsed)) return; // nothing valid to save (e.g. Interstate dispatch with no Call #)
   try {
-    await set(ref(db, 'meta/lastCallNumber'), parseInt(num));
+    await set(ref(db, 'meta/lastCallNumber'), parsed);
   } catch(e) { console.warn('Could not save call number:', e); }
 }
 
@@ -2734,6 +2809,47 @@ window.clearForm = async function() {
 
 // ── Init ──
 loadAll();
+</script>
+<script>
+// ── PWA: installability (Android/Chrome "Add to Home Screen") ──
+var deferredInstallPrompt = null;
+
+window.addEventListener('beforeinstallprompt', function(e) {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  var btn = document.getElementById('installAppBtn');
+  if (btn) btn.style.display = 'inline-flex';
+});
+
+window.installApp = async function() {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  var btn = document.getElementById('installAppBtn');
+  if (btn) btn.style.display = 'none';
+};
+
+window.addEventListener('appinstalled', function() {
+  var btn = document.getElementById('installAppBtn');
+  if (btn) btn.style.display = 'none';
+  deferredInstallPrompt = null;
+});
+
+// Already running as an installed app (standalone) — no need to offer install
+if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+  var installBtnEl = document.getElementById('installAppBtn');
+  if (installBtnEl) installBtnEl.style.display = 'none';
+}
+
+// ── PWA: service worker (static-shell caching, required by Chrome for installability) ──
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('sw.js').catch(function(e) {
+      console.warn('Service worker registration failed:', e);
+    });
+  });
+}
 </script>
 </body>
 </html>
