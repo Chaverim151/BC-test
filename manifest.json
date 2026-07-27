@@ -1,0 +1,32 @@
+{
+  "name": "Chaverim Bergen County — Dispatch",
+  "short_name": "BC Dispatch",
+  "description": "Emergency dispatch form for Chaverim Bergen County",
+  "start_url": "./index.html",
+  "scope": "./",
+  "id": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0F0E06",
+  "theme_color": "#0F0E06",
+  "icons": [
+    {
+      "src": "https://i.ibb.co/Kc2B52nS/download-1.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://i.ibb.co/Kc2B52nS/download-1.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://i.ibb.co/Kc2B52nS/download-1.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

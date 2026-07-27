@@ -34,11 +34,25 @@ window.initAutocomplete = function() {
     input.dataset.lat = place.geometry.location.lat();
     input.dataset.lng = place.geometry.location.lng();
     // Keep the POI/establishment name (e.g. "Costco", "ShopRite") so it can be
-    // shown above the address in the dispatch message — only when it's distinct
-    // from the address itself (a plain street geocode has no separate name).
-    input.dataset.name = (place.name && place.name !== address) ? place.name : '';
+    // shown above the address in the dispatch message — only when it's a truly
+    // distinct place name, not a plain street geocode where Google sets
+    // place.name to something that's effectively already part of the address.
+    input.dataset.name = window.isMeaningfullyDifferentPoiName(place.name, address) ? place.name : '';
     if (window.updateZoneBadge) window.updateZoneBadge();
   });
+};
+
+// True only when `name` adds real information beyond the address itself —
+// not an exact match, and not just a substring/prefix of the address (which
+// happens for plain street geocodes where Google sets place.name to the
+// street address rather than an actual business/POI name).
+window.isMeaningfullyDifferentPoiName = function(name, address) {
+  if (!name || !address) return false;
+  var n = name.trim().toLowerCase();
+  var a = address.trim().toLowerCase();
+  if (!n || n === a) return false;
+  if (a.indexOf(n) !== -1) return false;
+  return true;
 };
 </script>
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAFAsM0xqmKrnirTKIH9If2s4GuDpmO6BQ&libraries=places&loading=async&callback=initAutocomplete" async defer></script>
