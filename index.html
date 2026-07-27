@@ -287,6 +287,8 @@ window.isMeaningfullyDifferentPoiName = function(name, address) {
   .btn-wa:hover { background: #D8B540; }
   .btn-int { background: #0F0E06; color: #C8A532; border: 1.5px solid #2E2A10; }
   .btn-int:hover { background: #1C1A08; }
+  .btn-copy { background: transparent; color: #8B6E1A; border: 1.5px dashed #C8A532; }
+  .btn-copy:hover { background: #F5ECC0; color: #6B5515; }
 
   /* ── Preview ── */
   .preview { background: #0F0E06; border-radius: 14px; padding: 1.1rem 1.25rem; margin-top: 1.1rem; display: none; border: 1px solid #2A2810; }
@@ -671,6 +673,7 @@ window.isMeaningfullyDifferentPoiName = function(name, address) {
       <div class="actions">
         <button class="btn btn-wa" onclick="window.dispatchWhatsApp()"><i class="ti ti-message-circle"></i> Dispatch via WhatsApp</button>
         <button class="btn btn-int" id="dispatchIntBtn" onclick="window.dispatchInterstate()"><i class="ti ti-car"></i> Dispatch to Interstate</button>
+        <button class="btn btn-copy" onclick="window.copyMessage()"><i class="ti ti-copy"></i> Copy Message</button>
       </div>
     </div>
   </div>
@@ -2741,6 +2744,39 @@ function showPreview(txt) {
   document.getElementById('preview').classList.add('on');
 }
 
+// Copies the dispatch message to the clipboard without actually sending it —
+// doesn't enforce required fields since this is just a utility, not a dispatch.
+window.copyMessage = async function() {
+  var d = getFormData();
+  var msg = buildWA(d);
+  showPreview(msg);
+
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(msg);
+      showToast('\u2713 Message copied to clipboard');
+      return;
+    }
+    throw new Error('Clipboard API unavailable');
+  } catch (e) {
+    // Fallback for contexts where the async Clipboard API is blocked/missing
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = msg;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      showToast('\u2713 Message copied to clipboard');
+    } catch (e2) {
+      showToast('Could not copy \u2014 message shown in preview below');
+    }
+  }
+};
+
 // ── Shared dispatch-check modal (outside coverage area / missing info / etc.) ──
 window.showDispatchModal = function(opts) {
   document.getElementById('dispatchCheckIcon').className = 'ti ' + opts.icon;
@@ -2927,6 +2963,18 @@ window.showOutsideZoneModal = function() {
   });
 };
 
+// window.open(url, '_blank') is frequently silently blocked when running as
+// an installed/standalone PWA (no window chrome for a new tab to open into),
+// returning null instead of actually launching anything — which is why
+// WhatsApp dispatch could appear to do nothing once installed. Falls back to
+// direct navigation, which reliably triggers wa.me's app-switch behavior.
+function openExternalLink(url) {
+  var win = window.open(url, '_blank');
+  if (!win) {
+    window.location.href = url;
+  }
+}
+
 window.dispatchWhatsApp = async function() {
   var d = getFormData();
   if (!d.urgent) {
@@ -2936,7 +2984,7 @@ window.dispatchWhatsApp = async function() {
   var msg = buildWA(d);
   showPreview(msg);
   await saveCallNumber(d.callNum);
-  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+  openExternalLink('https://wa.me/?text=' + encodeURIComponent(msg));
 };
 
 window.dispatchInterstate = async function() {
@@ -2961,12 +3009,12 @@ window.dispatchInterstate = async function() {
   var msg = buildInt(d);
   showPreview(msg);
   await saveCallNumber(d.callNum);
-  window.open('https://wa.me/18458524357?text=' + encodeURIComponent(msg), '_blank');
+  openExternalLink('https://wa.me/18458524357?text=' + encodeURIComponent(msg));
 };
 
 window.verifyLocation = function() {
   var loc = document.getElementById('location').value;
-  if (loc) window.open('https://maps.google.com/?q=' + encodeURIComponent(loc), '_blank');
+  if (loc) openExternalLink('https://maps.google.com/?q=' + encodeURIComponent(loc));
 };
 
 window.clearForm = async function() {
