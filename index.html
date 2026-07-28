@@ -42,14 +42,32 @@ window.initAutocomplete = function() {
   });
 };
 
+// Common street-suffix abbreviations Google mixes between the place name and
+// the formatted address (e.g. name: "...Parkway", address: "...Pkwy") — expand
+// both to the same form before comparing, or these look "different" when
+// they're actually the same road.
+var STREET_ABBR = {
+  pkwy: 'parkway', st: 'street', ave: 'avenue', av: 'avenue',
+  blvd: 'boulevard', rd: 'road', dr: 'drive', ct: 'court',
+  ln: 'lane', hwy: 'highway', expy: 'expressway', fwy: 'freeway',
+  pl: 'place', ter: 'terrace', cir: 'circle', sq: 'square',
+  trl: 'trail', byp: 'bypass', mtn: 'mountain'
+};
+
+function normalizeAddressText(s) {
+  var cleaned = (s || '').toLowerCase().replace(/[.,]/g, '').replace(/\s+/g, ' ').trim();
+  return cleaned.split(' ').map(function(w) { return STREET_ABBR[w] || w; }).join(' ');
+}
+
 // True only when `name` adds real information beyond the address itself —
-// not an exact match, and not just a substring/prefix of the address (which
-// happens for plain street geocodes where Google sets place.name to the
-// street address rather than an actual business/POI name).
+// not an exact match (after normalizing abbreviations), and not just a
+// substring/prefix of the address (which happens for plain street geocodes
+// where Google sets place.name to the street address rather than an actual
+// business/POI name).
 window.isMeaningfullyDifferentPoiName = function(name, address) {
   if (!name || !address) return false;
-  var n = name.trim().toLowerCase();
-  var a = address.trim().toLowerCase();
+  var n = normalizeAddressText(name);
+  var a = normalizeAddressText(address);
   if (!n || n === a) return false;
   if (a.indexOf(n) !== -1) return false;
   return true;
@@ -384,9 +402,14 @@ window.isMeaningfullyDifferentPoiName = function(name, address) {
     <div class="brand-sub">Bergen County</div>
     <div class="brand-tag">Dispatch Center</div>
   </div>
-  <button id="installAppBtn" onclick="window.installApp()" style="display:none;margin-left:auto;align-items:center;gap:6px;background:#C8A532;color:#0F0E06;border:none;border-radius:9px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">
-    <i class="ti ti-download" style="font-size:15px;"></i> Install App
-  </button>
+  <div style="display:flex;align-items:center;gap:8px;margin-left:auto;">
+    <button id="unitBadgeBtn" onclick="window.showUnitSetupModal()" style="display:none;align-items:center;gap:6px;background:transparent;color:#C8A532;border:1.5px solid #3A3010;border-radius:9px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">
+      <i class="ti ti-id-badge-2" style="font-size:15px;"></i> <span id="unitBadgeText"></span>
+    </button>
+    <button id="installAppBtn" onclick="window.installApp()" style="display:none;align-items:center;gap:6px;background:#C8A532;color:#0F0E06;border:none;border-radius:9px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">
+      <i class="ti ti-download" style="font-size:15px;"></i> Install App
+    </button>
+  </div>
 </div>
 
 <div class="page">
@@ -671,7 +694,7 @@ window.isMeaningfullyDifferentPoiName = function(name, address) {
       <div class="divider"></div>
 
       <div class="actions">
-        <button class="btn btn-wa" onclick="window.dispatchWhatsApp()"><i class="ti ti-message-circle"></i> Dispatch via WhatsApp</button>
+        <button class="btn btn-wa" onclick="window.dispatchWhatsApp()"><i class="ti ti-message-circle"></i> Post to Active Calls</button>
         <button class="btn btn-int" id="dispatchIntBtn" onclick="window.dispatchInterstate()"><i class="ti ti-car"></i> Dispatch to Interstate</button>
         <button class="btn btn-copy" onclick="window.copyMessage()"><i class="ti ti-copy"></i> Copy Message</button>
       </div>
@@ -758,6 +781,29 @@ window.isMeaningfullyDifferentPoiName = function(name, address) {
       <div class="modal-btns" style="grid-template-columns:1fr;">
         <button class="modal-btn modal-btn-ignore" onclick="window.useI911Location()">Use This Location</button>
         <button class="modal-btn modal-btn-no" onclick="window.dismissI911Modal()" style="margin-top:8px;">Dismiss</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Dispatcher setup — asked once on first load, editable later via the header badge -->
+<div class="modal-overlay" id="unitSetupModal">
+  <div class="modal" id="unitSetupModalBox">
+    <div class="modal-hdr">
+      <i class="ti ti-id-badge-2"></i>
+      <div class="modal-hdr-txt">Dispatcher Setup</div>
+    </div>
+    <div class="modal-body">
+      <div class="modal-question">Enter your unit info to get started</div>
+      <div class="modal-sub">Used to identify you as the dispatcher and to let responders reach you directly.</div>
+      <div style="text-align:left;margin-top:1rem;">
+        <div class="lbl" style="justify-content:flex-start;margin-bottom:6px;"><i class="ti ti-id-badge-2"></i> Unit Number</div>
+        <input type="text" id="setupUnitNumber" placeholder="BC-123" style="margin-bottom:16px;" />
+        <div class="lbl" style="justify-content:flex-start;margin-bottom:6px;"><i class="ti ti-brand-whatsapp"></i> Your WhatsApp Number</div>
+        <input type="tel" id="setupWhatsappNumber" placeholder="(555) 123-4567" />
+      </div>
+      <div class="modal-btns" style="grid-template-columns:1fr;margin-top:1.25rem;">
+        <button class="modal-btn modal-btn-ignore" onclick="window.saveUnitSetup()">Continue</button>
       </div>
     </div>
   </div>
@@ -994,8 +1040,9 @@ window.requestI911Location = async function() {
     data = await resp.json().catch(function() { return null; });
   } catch (e) {
     if (btn) { btn.style.opacity = ''; btn.style.pointerEvents = ''; }
-    showToast('Could not reach i911 relay — check connection');
+    showToast('Could not reach i911 relay \u2014 opening i911.com instead');
     console.warn('i911 request error:', e);
+    openExternalLink('https://www.i911.com');
     return;
   }
 
@@ -1003,8 +1050,9 @@ window.requestI911Location = async function() {
 
   if (!resp.ok || !data || !data.webSocketURL) {
     var errMsg = (data && data.error) ? data.error : ('HTTP ' + resp.status);
-    showToast('i911 request failed: ' + errMsg);
+    showToast('i911 request failed (' + errMsg + ') \u2014 opening i911.com instead');
     console.warn('i911 request failed:', errMsg);
+    openExternalLink('https://www.i911.com');
     return;
   }
 
@@ -1014,7 +1062,8 @@ window.requestI911Location = async function() {
 
 window.connectI911Socket = function(webSocketURL) {
   if (typeof io !== 'function') {
-    showToast('Location service unavailable (socket.io failed to load)');
+    showToast('Location service unavailable \u2014 opening i911.com instead');
+    openExternalLink('https://www.i911.com');
     return;
   }
 
@@ -1023,15 +1072,18 @@ window.connectI911Socket = function(webSocketURL) {
 
   socket.on('connect_error', function(err) {
     console.warn('i911 socket connect_error:', err && err.message ? err.message : err);
-    showToast('Could not connect to i911 location service');
+    showToast('Could not connect to i911 location service \u2014 opening i911.com instead');
     window.closeI911Socket();
+    openExternalLink('https://www.i911.com');
   });
 
   socket.on('location-update', function(payload) {
     window.handleI911Location(payload);
   });
 
-  // Give up if the caller never responds to the location-request text
+  // Give up if the caller never responds to the location-request text.
+  // This is NOT an API failure (the request itself succeeded — the caller
+  // just hasn't tapped the link yet), so it does not redirect to i911.com.
   window._i911TimeoutId = setTimeout(function() {
     showToast('No location received from caller (timed out)');
     window.closeI911Socket();
@@ -1118,6 +1170,114 @@ window.useI911Location = function() {
   window.dismissI911Modal();
   showToast('\u2713 Location filled from i911');
 };
+
+// ── Dispatcher unit setup (Unit # + WhatsApp #), persisted locally ──
+window.getUnitInfo = function() {
+  return {
+    unit: localStorage.getItem('bc_unit_number') || '',
+    whatsapp: localStorage.getItem('bc_whatsapp_number') || ''
+  };
+};
+
+window.updateUnitBadge = function() {
+  var info = window.getUnitInfo();
+  var btn = document.getElementById('unitBadgeBtn');
+  var text = document.getElementById('unitBadgeText');
+  if (!btn || !text) return;
+  if (info.unit) {
+    text.textContent = info.unit;
+    btn.style.display = 'inline-flex';
+  } else {
+    btn.style.display = 'none';
+  }
+};
+
+window.showUnitSetupModal = function() {
+  var info = window.getUnitInfo();
+  document.getElementById('setupUnitNumber').value = info.unit || '';
+  document.getElementById('setupWhatsappNumber').value = info.whatsapp || '';
+  document.getElementById('unitSetupModal').classList.add('on');
+};
+
+window.saveUnitSetup = function() {
+  var unitInput = document.getElementById('setupUnitNumber');
+  var waInput = document.getElementById('setupWhatsappNumber');
+  var unit = (unitInput.value || '').trim().toUpperCase();
+  var waE164 = toE164(waInput.value);
+
+  if (!/^BC-\d+$/.test(unit)) {
+    showToast('Unit number should look like BC-123');
+    unitInput.focus();
+    return;
+  }
+  if (!waE164) {
+    showToast('Enter a valid WhatsApp number');
+    waInput.focus();
+    return;
+  }
+
+  localStorage.setItem('bc_unit_number', unit);
+  localStorage.setItem('bc_whatsapp_number', waE164);
+  document.getElementById('unitSetupModal').classList.remove('on');
+  window.updateUnitBadge();
+  showToast('\u2713 Unit info saved');
+};
+
+// Ask for unit info on first load if it isn't set yet; otherwise just show the badge.
+(function initUnitSetup() {
+  var info = window.getUnitInfo();
+  window.updateUnitBadge();
+  if (!info.unit || !info.whatsapp) {
+    document.getElementById('unitSetupModal').classList.add('on');
+  }
+})();
+
+// ── WAHA (WhatsApp HTTP API) auto-post to the Active Calls dispatch chat ──
+// Routed through waha-worker.js (a Cloudflare Worker) rather than calling
+// WAHA directly, for two reasons:
+//   1. Mixed content — the WAHA server is plain http://, and this app runs
+//      on https://; browsers flatly block an HTTPS page from fetch()-ing an
+//      insecure http:// endpoint. The Worker's own connection to WAHA isn't
+//      subject to that rule.
+//   2. The WAHA API key, session name, and Active Calls chat id stay in the
+//      Worker instead of sitting in this file, which GitHub Pages serves as
+//      plain, publicly-readable text.
+// TODO: replace with your deployed waha-worker.js URL once it's live.
+const WAHA_PROXY_BASE = 'https://waha.shmueleidelman-work.workers.dev';
+
+// Builds the "click to respond" footer appended to every auto-posted call,
+// linking directly to the dispatcher's own WhatsApp number.
+function buildResponderFooter() {
+  var info = window.getUnitInfo();
+  if (!info.whatsapp) return [];
+  var digitsOnly = info.whatsapp.replace(/\D/g, '');
+  return [
+    '',
+    'Click the link below to respond or PM the dispatcher',
+    'https://wa.me/' + digitsOnly
+  ];
+}
+
+// POSTs a message to the Active Calls WhatsApp group via the WAHA Worker.
+// Returns true on success, false on any failure (caller falls back to the
+// manual wa.me link so a WAHA/Worker outage never blocks a dispatch).
+async function postToWahaActiveCalls(message) {
+  try {
+    var resp = await fetch(WAHA_PROXY_BASE + '/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: message })
+    });
+    var data = await resp.json().catch(function() { return null; });
+    if (!resp.ok || !data || !data.ok) {
+      throw new Error((data && data.error) ? data.error : ('HTTP ' + resp.status));
+    }
+    return true;
+  } catch (e) {
+    console.warn('WAHA post failed:', e);
+    return false;
+  }
+}
 
 // ── EZ Spare fitment lookup (Flat Tire → "No spare, needs EZ spare") ──
 const EZ_SPARE_PROXY_BASE = 'https://ezspare.shmueleidelman-work.workers.dev';
@@ -2715,6 +2875,7 @@ function buildWA(d) {
   lines.push('');
   lines.push('SAFETY FIRST!  Please remember to wear your Chaverim vest.');
   lines.push('Please remember to have the caller sign the waiver.');
+  buildResponderFooter().forEach(function(l){ lines.push(l); });
   return lines.join('\n');
 }
 
@@ -2984,7 +3145,15 @@ window.dispatchWhatsApp = async function() {
   var msg = buildWA(d);
   showPreview(msg);
   await saveCallNumber(d.callNum);
-  openExternalLink('https://wa.me/?text=' + encodeURIComponent(msg));
+
+  showToast('Posting to Active Calls...');
+  var posted = await postToWahaActiveCalls(msg);
+  if (posted) {
+    showToast('\u2713 Posted to Active Calls chat');
+  } else {
+    showToast('Auto-post failed \u2014 opening WhatsApp manually instead');
+    openExternalLink('https://wa.me/?text=' + encodeURIComponent(msg));
+  }
 };
 
 window.dispatchInterstate = async function() {
